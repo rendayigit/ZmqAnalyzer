@@ -21,8 +21,11 @@ SubscriberPanel::SubscriberPanel(wxWindow *parent)
   addressSzr->Add(addressTxtCtrl, 1, wxALL | wxEXPAND, wxSizerFlags::GetDefaultBorder());
 
   messageListCtrl = new wxListCtrl(this, wxID_ANY, wxDefaultPosition, wxSize(MESSAGE_LIST_CTRL_WIDTH, -1), wxLC_REPORT);
-  messageTxtCtrl = new wxTextCtrl(this, wxID_ANY, "Select a message from the list to display", wxDefaultPosition,
-                                  wxDefaultSize, wxTE_MULTILINE | wxTE_READONLY);
+
+  // Vertically center by padding with newlines above and below
+  wxString initialMsg = "\n\nSelect a message from the list to display\n\n";
+  messageTxtCtrl = new wxTextCtrl(this, wxID_ANY, initialMsg, wxDefaultPosition, wxDefaultSize,
+                                  wxTE_MULTILINE | wxTE_READONLY | wxTE_CENTER);
 
   messageListCtrl->InsertColumn(0, "Topic", wxLIST_FORMAT_LEFT, MESSAGE_LIST_CTRL_TOPIC_WIDTH);
   messageListCtrl->InsertColumn(1, "Message", wxLIST_FORMAT_LEFT, MESSAGE_LIST_CTRL_MESSAGE_WIDTH);
@@ -50,10 +53,22 @@ SubscriberPanel::SubscriberPanel(wxWindow *parent)
   SetSizer(mainSzr);
 
   Bind(wxEVT_BUTTON, &SubscriberPanel::onStartSubscriber, this, startSubBtn->GetId());
+  messageListCtrl->Bind(wxEVT_LIST_ITEM_SELECTED, &SubscriberPanel::onMessageSelected, this);
 }
 
-void SubscriberPanel::onStartSubscriber(
-    wxCommandEvent &event) { // NOLINT(readability-convert-member-functions-to-static)
+void SubscriberPanel::onStartSubscriber(wxCommandEvent &event) {
   wxLogMessage("Starting subscriber...");
   event.Skip();
+}
+
+void SubscriberPanel::onMessageSelected(wxListEvent &event) {
+  // Remove centering and padding on messageTxtCtrl
+  messageTxtCtrl->SetWindowStyleFlag(wxTE_MULTILINE | wxTE_READONLY);
+
+  long itemIndex = event.GetIndex();
+  wxString message = messageListCtrl->GetItemText(itemIndex, 1);
+  messageTxtCtrl->ChangeValue(message);
+
+  wxString topic = messageListCtrl->GetItemText(itemIndex);
+  messageTxtCtrl->SetToolTip(topic);
 }

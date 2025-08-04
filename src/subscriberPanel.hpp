@@ -9,6 +9,7 @@ public:
 
 private:
   void onStartSubscriber(wxCommandEvent &event);
+  void onMessageSelected(wxListEvent &event);
 
   wxBoxSizer *mainSzr;
   wxBoxSizer *addressSzr;
