@@ -24,6 +24,13 @@ execute_process(COMMAND ${WX_CONFIG} --libs OUTPUT_VARIABLE WX_LIBS OUTPUT_STRIP
 separate_arguments(WX_CXX_FLAGS)
 separate_arguments(WX_LIBS)
 
+find_package(
+  Boost 1.74.0
+  COMPONENTS filesystem program_options
+  REQUIRED)
+
+add_definitions(-DBOOST_BIND_GLOBAL_PLACEHOLDERS)
+
 # Set target directory
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin/)
 
@@ -34,6 +41,6 @@ add_executable(app ${SOURCEFILES})
 
 # Apply wxWidgets flags
 target_compile_options(app PRIVATE ${WX_CXX_FLAGS})
-target_link_libraries(app ${WX_LIBS})
+target_link_libraries(app ${WX_LIBS} Boost::filesystem Boost::program_options fmt spdlog zmq)
 
 target_include_directories(app PUBLIC ${INCLUDEDIRS})

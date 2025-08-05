@@ -1,5 +1,7 @@
 #include "subscriberPanel.hpp"
 
+#include "subscriber.hpp"
+
 #include <wx/textctrl.h>
 
 constexpr int MESSAGE_LIST_CTRL_TOPIC_WIDTH = 100;
@@ -54,10 +56,24 @@ SubscriberPanel::SubscriberPanel(wxWindow *parent)
 
   Bind(wxEVT_BUTTON, &SubscriberPanel::onStartSubscriber, this, startSubBtn->GetId());
   messageListCtrl->Bind(wxEVT_LIST_ITEM_SELECTED, &SubscriberPanel::onMessageSelected, this);
+
+  Subscriber::getInstance().setOnMessageReceivedCallback([&](nlohmann::json const &message) {
+    wxString topic = message["topic"];
+    wxString msg = message["message"];
+    wxTheApp->CallAfter([=]() { // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
+      messageListCtrl->InsertItem(0, topic);
+      messageListCtrl->SetItem(0, 1, msg);
+
+      if (messageListCtrl->GetItemCount() > 100) {
+        messageListCtrl->DeleteItem(100); // Keep the list size manageable
+      }
+    });
+  });
 }
 
 void SubscriberPanel::onStartSubscriber(wxCommandEvent &event) {
-  wxLogMessage("Starting subscriber...");
+  Subscriber::getInstance().start();
+
   event.Skip();
 }
 
