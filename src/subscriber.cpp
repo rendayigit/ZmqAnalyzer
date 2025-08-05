@@ -84,10 +84,15 @@ void Subscriber::step(boost::system::error_code const &errorCode) {
   zmq::recv_result_t result = zmq::recv_multipart(*m_socket, std::back_inserter(recvMsgs));
   assert(result && "\n>>> recv failed");
   assert(*result == 2);
-  
+
   nlohmann::json message;
   message["topic"] = recvMsgs.at(0).to_string();
-  message["message"] = recvMsgs.at(1).to_string();
+  try {
+    nlohmann::json msgJson = nlohmann::json::parse(recvMsgs.at(1).to_string());
+    message["message"] = msgJson.dump(2);
+  } catch (const nlohmann::json::parse_error &) {
+    message["message"] = recvMsgs.at(1).to_string();
+  }
   m_onMessageReceivedCallback(message);
 
   // Reschedule the timer for the next step
