@@ -32,14 +32,6 @@ SubscriberPanel::SubscriberPanel(wxWindow *parent)
   messageListCtrl->InsertColumn(0, "Topic", wxLIST_FORMAT_LEFT, MESSAGE_LIST_CTRL_TOPIC_WIDTH);
   messageListCtrl->InsertColumn(1, "Message", wxLIST_FORMAT_LEFT, MESSAGE_LIST_CTRL_MESSAGE_WIDTH);
 
-  // TODO: Dummy data for testing purposes
-  messageListCtrl->InsertItem(0, "Topic 1");
-  messageListCtrl->SetItem(0, 1, "Message 1");
-  messageListCtrl->InsertItem(1, "Topic 2");
-  messageListCtrl->SetItem(1, 1, "Message 2");
-  messageListCtrl->InsertItem(2, "Topic 3");
-  messageListCtrl->SetItem(2, 1, "Message 3");
-
   messageSzr->Add(messageListCtrl, 0, wxALL | wxEXPAND, wxSizerFlags::GetDefaultBorder());
   messageSzr->Add(messageTxtCtrl, 1, wxALL | wxEXPAND, wxSizerFlags::GetDefaultBorder());
 
@@ -54,7 +46,7 @@ SubscriberPanel::SubscriberPanel(wxWindow *parent)
 
   SetSizer(mainSzr);
 
-  Bind(wxEVT_BUTTON, &SubscriberPanel::onStartSubscriber, this, startSubBtn->GetId());
+  startSubBtn->Bind(wxEVT_BUTTON, &SubscriberPanel::onStartSubscriber, this);
   messageListCtrl->Bind(wxEVT_LIST_ITEM_SELECTED, &SubscriberPanel::onMessageSelected, this);
 
   Subscriber::getInstance().setOnMessageReceivedCallback([&](nlohmann::json const &message) {

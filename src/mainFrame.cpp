@@ -1,6 +1,5 @@
 #include "mainFrame.hpp"
 
-#include "helloPanel.hpp"
 #include "subscriberPanel.hpp"
 
 #include <wx/defs.h>
@@ -41,11 +40,9 @@ MainFrame::MainFrame()
   notebook = new wxNotebook(panel, wxID_ANY);
 
   // Create tab panels
-  tabHello = new HelloPanel(notebook);
   subscriber = new SubscriberPanel(notebook);
 
   // Add tabs to notebook
-  notebook->AddPage(tabHello, "Hello");
   notebook->AddPage(subscriber, "Subscriber");
 
   // Layout notebook in main panel
@@ -63,12 +60,14 @@ void MainFrame::onExit(wxCommandEvent &event) {
   event.Skip();
 }
 
+// TODO: Implement
 void MainFrame::onAbout(wxCommandEvent &event) { // NOLINT(readability-convert-member-functions-to-static)
-  wxMessageBox(HELLO_MESSAGE, "About", wxOK | wxICON_INFORMATION); // NOLINT(hicpp-signed-bitwise)
+  wxMessageBox("ZMQ Analyzer", "About", wxOK | wxICON_INFORMATION); // NOLINT(hicpp-signed-bitwise)
   event.Skip();
 }
 
+// TODO: Implement
 void MainFrame::onHello(wxCommandEvent &event) { // NOLINT(readability-convert-member-functions-to-static)
-  wxLogMessage(HELLO_MESSAGE);
+  wxLogMessage("Hello");
   event.Skip();
 }
