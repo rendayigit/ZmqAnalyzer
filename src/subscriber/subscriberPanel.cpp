@@ -77,6 +77,9 @@ SubscriberPanel::SubscriberPanel(wxWindow *parent)
 
 void SubscriberPanel::onStartSubscriber( // NOLINT(readability-convert-member-functions-to-static)
     wxCommandEvent &event) {
+
+  // TODO: Use address and port provided in the UI
+
   std::vector<std::string> topics;
   wxStringTokenizer tokenizer(topicTxtCtrl->GetValue(), ",");
   while (tokenizer.HasMoreTokens()) {

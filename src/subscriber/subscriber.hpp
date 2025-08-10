@@ -36,8 +36,8 @@ private:
   std::function<void(nlohmann::json const &)> m_onMessageReceivedCallback;
 
   std::string m_port;
-  zmq::context_t *m_context{};
-  zmq::socket_t *m_socket{};
+  zmq::context_t *m_context;
+  zmq::socket_t *m_socket;
 
   boost::asio::io_service m_subscriberService;
   boost::asio::io_service::work m_subscriberWorker;
