@@ -1,6 +1,6 @@
 #include "mainFrame.hpp"
 
-#include "subscriberPanel.hpp"
+#include "subscriber/subscriberPanel.hpp"
 
 #include <wx/defs.h>
 #include <wx/notebook.h>

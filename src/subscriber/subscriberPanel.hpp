@@ -1,5 +1,7 @@
 #pragma once
 
+#include "subscriber/topicFrame.hpp"
+
 #include <wx/listctrl.h>
 #include <wx/wx.h>
 
@@ -20,7 +22,8 @@ private:
   wxTextCtrl *addressTxtCtrl;
 
   wxListCtrl *messageListCtrl;
-  wxTextCtrl *messageTxtCtrl;
 
   wxButton *startSubBtn;
+
+  std::map<wxString, TopicFrame *> m_topicFrames;
 };

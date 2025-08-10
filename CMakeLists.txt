@@ -39,8 +39,8 @@ include(${CMAKE_CURRENT_LIST_DIR}/src/SourceFiles.cmake)
 
 add_executable(app ${SOURCEFILES})
 
+target_include_directories(app PUBLIC ${INCLUDEDIRS})
+
 # Apply wxWidgets flags
 target_compile_options(app PRIVATE ${WX_CXX_FLAGS})
 target_link_libraries(app ${WX_LIBS} Boost::filesystem Boost::program_options fmt spdlog zmq)
-
-target_include_directories(app PUBLIC ${INCLUDEDIRS})

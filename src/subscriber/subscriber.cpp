@@ -3,7 +3,6 @@
 #include "logger.hpp"
 
 #include <chrono>
-#include <iostream>
 #include <string>
 #include <thread>
 #include <zmq_addon.hpp>
@@ -73,6 +72,16 @@ void Subscriber::stop() {
   }
 }
 
+wxString Subscriber::getLatestMessage(const wxString &topic) {
+  auto it = m_latestMessages.find(topic);
+
+  if (it != m_latestMessages.end()) {
+    return it->second;
+  }
+
+  return "";
+}
+
 void Subscriber::step(boost::system::error_code const &errorCode) {
   // Abort step if stopped
   if (not m_isRunning) {
@@ -85,15 +94,21 @@ void Subscriber::step(boost::system::error_code const &errorCode) {
   assert(result && "\n>>> recv failed");
   assert(*result == 2);
 
-  nlohmann::json message;
-  message["topic"] = recvMsgs.at(0).to_string();
+  std::string topic = recvMsgs.at(0).to_string();
+  std::string message;
   try {
     nlohmann::json msgJson = nlohmann::json::parse(recvMsgs.at(1).to_string());
-    message["message"] = msgJson.dump(2);
+    message = msgJson.dump(2);
   } catch (const nlohmann::json::parse_error &) {
-    message["message"] = recvMsgs.at(1).to_string();
+    message = recvMsgs.at(1).to_string();
   }
-  m_onMessageReceivedCallback(message);
+
+  nlohmann::json messageJson;
+  messageJson["topic"] = topic;
+  messageJson["message"] = message;
+  m_onMessageReceivedCallback(messageJson);
+
+  m_latestMessages[topic] = message;
 
   // Reschedule the timer for the next step
   if (not errorCode) {

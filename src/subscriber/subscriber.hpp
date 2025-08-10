@@ -2,8 +2,10 @@
 
 #include <boost/asio.hpp>
 #include <functional>
+#include <map>
 #include <nlohmann/json.hpp>
 #include <string>
+#include <wx/string.h>
 #include <zmq.hpp>
 
 class Subscriber {
@@ -24,10 +26,13 @@ public:
     m_onMessageReceivedCallback = onMessageReceivedCallback;
   }
 
+  wxString getLatestMessage(const wxString &topic);
+
 private:
   Subscriber();
 
   void step(boost::system::error_code const &errorCode);
+  std::function<void(nlohmann::json const &)> m_onMessageReceivedCallback;
 
   std::string m_port;
   zmq::context_t *m_context{};
@@ -41,5 +46,5 @@ private:
   std::thread m_stepTimerThread;
   bool m_isRunning{};
 
-  std::function<void(nlohmann::json const &)> m_onMessageReceivedCallback;
+  std::map<wxString, wxString> m_latestMessages;
 };
