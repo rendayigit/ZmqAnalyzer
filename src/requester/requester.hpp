@@ -12,7 +12,7 @@ public:
 
   ~Requester();
 
-  void request(const std::string &message);
+  std::string request(const std::string &message);
 
   std::string getPort() const { return m_port; }
 

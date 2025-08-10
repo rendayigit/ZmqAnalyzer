@@ -17,5 +17,8 @@ private:
   wxStaticText *addressLbl;
   wxTextCtrl *addressTxtCtrl;
 
+  wxTextCtrl *requestTxtCtrl;
+  wxTextCtrl *responseTxtCtrl;
+
   wxButton *requestBtn;
 };

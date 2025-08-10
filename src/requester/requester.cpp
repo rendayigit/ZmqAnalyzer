@@ -11,17 +11,18 @@ Requester::Requester()
   m_socket->connect("tcp://0.0.0.0:" + m_port);
 }
 
-void Requester::request(const std::string &message) {
+std::string Requester::request(const std::string &message) {
   zmq::message_t request(message.data(), message.size());
   m_socket->send(request, zmq::send_flags::none);
 
   zmq::message_t reply;
   zmq::recv_result_t recv_result = m_socket->recv(reply, zmq::recv_flags::none);
 
-  std::cout << "Received reply: " << reply.to_string() << std::endl;
-
+  // TODO: Implement error handling
   if (recv_result) {
   }
+
+  return reply.to_string();
 }
 
 Requester::~Requester() {

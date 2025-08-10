@@ -1,13 +1,11 @@
 #include "requesterPanel.hpp"
 
 #include "requester.hpp"
+#include "wx/gdicmn.h"
 #include "wxConstants.hpp"
 
 constexpr int ADDRESS_WIDTH = 200;
-constexpr int MESSAGE_LIST_CTRL_TOPIC_WIDTH = 100;
-constexpr int MESSAGE_LIST_CTRL_MESSAGE_WIDTH = 850;
-constexpr int MESSAGE_LIST_CTRL_WIDTH = MESSAGE_LIST_CTRL_TOPIC_WIDTH + MESSAGE_LIST_CTRL_MESSAGE_WIDTH;
-constexpr int MAX_MESSAGE_COUNT = 100;
+constexpr int REQUEST_TEXT_AREA_WIDTH = 400;
 
 RequesterPanel::RequesterPanel(wxWindow *parent)
     : wxPanel(parent, wxID_ANY),
@@ -22,6 +20,14 @@ RequesterPanel::RequesterPanel(wxWindow *parent)
 
   topSzr->Add(addressLbl, 0, WX_CENTER, wxSizerFlags::GetDefaultBorder());
   topSzr->Add(addressTxtCtrl, 0, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
+
+  requestTxtCtrl
+      = new wxTextCtrl(this, wxID_ANY, "Enter your message here", wxDefaultPosition, wxSize(REQUEST_TEXT_AREA_WIDTH, -1), wxTE_MULTILINE);
+  messageSzr->Add(requestTxtCtrl, 0, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
+
+  responseTxtCtrl = new wxTextCtrl(this, wxID_ANY, "Response will be displayed here", wxDefaultPosition, wxDefaultSize,
+                                   WX_MULTILINE_READONLY);
+  messageSzr->Add(responseTxtCtrl, 1, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
 
   requestBtn = new wxButton(this, wxID_ANY, "Send request");
 
@@ -40,7 +46,9 @@ RequesterPanel::RequesterPanel(wxWindow *parent)
 void RequesterPanel::onSendRequest(wxCommandEvent &event) { // NOLINT(readability-convert-member-functions-to-static)
   // TODO: Use address and port provided in the UI
 
-  Requester::getInstance().request("Hello, World!"); // Example request
+  std::string response = Requester::getInstance().request(requestTxtCtrl->GetValue().ToStdString());
+
+  responseTxtCtrl->SetValue(response);
 
   event.Skip();
 }
