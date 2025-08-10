@@ -1,7 +1,6 @@
 #include "subscriberPanel.hpp"
 
 #include "subscriber.hpp"
-#include "wx/gdicmn.h"
 #include "wxConstants.hpp"
 
 #include <vector>
@@ -32,10 +31,9 @@ SubscriberPanel::SubscriberPanel(wxWindow *parent)
   topSzr->Add(topicLbl, 0, WX_CENTER, wxSizerFlags::GetDefaultBorder());
   topSzr->Add(topicTxtCtrl, 1, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
 
-  messageListCtrl = new wxListCtrl(this, wxID_ANY, wxDefaultPosition, wxSize(MESSAGE_LIST_CTRL_WIDTH, -1), wxLC_REPORT);
-  messageListCtrl->InsertColumn(0, "Topic", wxLIST_FORMAT_LEFT, MESSAGE_LIST_CTRL_TOPIC_WIDTH);
-  messageListCtrl->InsertColumn(1, "Message", wxLIST_FORMAT_LEFT, MESSAGE_LIST_CTRL_MESSAGE_WIDTH);
-
+  messageListCtrl = new wxDataViewListCtrl(this, wxID_ANY); // NOLINT(cppcoreguidelines-prefer-member-initializer)
+  messageListCtrl->AppendColumn(new wxDataViewColumn("Topic", new wxDataViewTextRenderer(), 0));
+  messageListCtrl->AppendColumn(new wxDataViewColumn("Message", new wxDataViewTextRenderer(), 1));
   messageSzr->Add(messageListCtrl, 1, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
 
   startSubBtn = new wxButton(this, wxID_ANY, "Start subscriber");
@@ -50,17 +48,24 @@ SubscriberPanel::SubscriberPanel(wxWindow *parent)
   SetSizer(mainSzr);
 
   startSubBtn->Bind(wxEVT_BUTTON, &SubscriberPanel::onStartSubscriber, this);
-  messageListCtrl->Bind(wxEVT_LIST_ITEM_SELECTED, &SubscriberPanel::onMessageSelected, this);
+  messageListCtrl->Bind(wxEVT_DATAVIEW_SELECTION_CHANGED, &SubscriberPanel::onMessageSelected, this);
 
   Subscriber::getInstance().setOnMessageReceivedCallback([&](nlohmann::json const &message) {
     wxString topic = message["topic"];
     wxString msg = message["message"];
     wxTheApp->CallAfter([=]() { // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-      messageListCtrl->InsertItem(0, topic);
-      messageListCtrl->SetItem(0, 1, msg);
+      wxVector<wxVariant> row;
+      row.push_back(wxVariant(topic));
+      row.push_back(wxVariant(msg));
+      messageListCtrl->InsertItem(0, row);
 
       if (messageListCtrl->GetItemCount() > MAX_MESSAGE_COUNT) {
         messageListCtrl->DeleteItem(MAX_MESSAGE_COUNT); // Keep the list size manageable
+      }
+
+      // Scroll to the top to show the newly added message
+      if (messageListCtrl->GetItemCount() > 0) {
+        messageListCtrl->EnsureVisible(messageListCtrl->RowToItem(0));
       }
     });
   });
@@ -78,10 +83,21 @@ void SubscriberPanel::onStartSubscriber( // NOLINT(readability-convert-member-fu
   event.Skip();
 }
 
-void SubscriberPanel::onMessageSelected(wxListEvent &event) {
-  long itemIndex = event.GetIndex();
-  wxString message = messageListCtrl->GetItemText(itemIndex, 1);
-  wxString topic = messageListCtrl->GetItemText(itemIndex);
+void SubscriberPanel::onMessageSelected(wxDataViewEvent &event) {
+  auto item = event.GetItem();
+  if (not item.IsOk()) {
+    return;
+  }
+
+  int row = messageListCtrl->ItemToRow(item);
+  wxVariant topicVariant;
+  wxVariant messageVariant;
+
+  messageListCtrl->GetValue(topicVariant, row, 0);   // Topic column
+  messageListCtrl->GetValue(messageVariant, row, 1); // Message column
+
+  wxString topic = topicVariant.GetString();
+  wxString message = messageVariant.GetString();
 
   if (m_topicFrames.find(topic) == m_topicFrames.end() or m_topicFrames[topic] == nullptr) {
     auto *topicFrame = new TopicFrame(this, topic, [=]() { m_topicFrames.erase(topic); });

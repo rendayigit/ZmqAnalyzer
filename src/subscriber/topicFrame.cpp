@@ -50,8 +50,17 @@ TopicFrame::~TopicFrame() {
 }
 
 void TopicFrame::updateMessage(const wxString &message) {
+  wxString messageJson;
+
+  try {
+    nlohmann::json msgJson = nlohmann::json::parse(message);
+    messageJson = msgJson.dump(2);
+  } catch (const nlohmann::json::parse_error &) {
+    messageJson = message;
+  }
+
   wxTheApp->CallAfter([=]() { // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-    messageTxtCtrl->ChangeValue(message);
+    messageTxtCtrl->ChangeValue(messageJson);
   });
 }
 

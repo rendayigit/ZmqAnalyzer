@@ -105,14 +105,7 @@ void Subscriber::step(boost::system::error_code const &errorCode) {
 
   if (result and *result == 2) {
     std::string topic = recvMsgs.at(0).to_string();
-    std::string message;
-
-    try {
-      nlohmann::json msgJson = nlohmann::json::parse(recvMsgs.at(1).to_string());
-      message = msgJson.dump(2);
-    } catch (const nlohmann::json::parse_error &) {
-      message = recvMsgs.at(1).to_string();
-    }
+    std::string message = recvMsgs.at(1).to_string();
 
     nlohmann::json messageJson;
     messageJson["topic"] = topic;

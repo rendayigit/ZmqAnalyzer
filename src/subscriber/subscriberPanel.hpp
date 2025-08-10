@@ -2,7 +2,7 @@
 
 #include "subscriber/topicFrame.hpp"
 
-#include <wx/listctrl.h>
+#include <wx/dataview.h>
 #include <wx/wx.h>
 
 class SubscriberPanel : public wxPanel {
@@ -11,7 +11,7 @@ public:
 
 private:
   void onStartSubscriber(wxCommandEvent &event);
-  void onMessageSelected(wxListEvent &event);
+  void onMessageSelected(wxDataViewEvent &event);
 
   wxBoxSizer *mainSzr;
   wxBoxSizer *topSzr;
@@ -24,7 +24,7 @@ private:
   wxStaticText *topicLbl;
   wxTextCtrl *topicTxtCtrl;
 
-  wxListCtrl *messageListCtrl;
+  wxDataViewListCtrl *messageListCtrl;
 
   wxButton *startSubBtn;
 
