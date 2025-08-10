@@ -10,7 +10,7 @@
 constexpr int MAX_CONTEXT_THREAD_COUNT = 1;
 constexpr int BINDING_DELAY = 200;
 constexpr int SOCKET_TIMEOUT = 100;
-constexpr int SUBSCRIBER_INTERVAL_MILLIS = 1;
+constexpr int SUBSCRIBER_INTERVAL_MILLIS = 10;
 
 Subscriber::Subscriber()
     : m_port("12345"),
