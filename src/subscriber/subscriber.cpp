@@ -3,13 +3,13 @@
 #include "logger.hpp"
 
 #include <chrono>
-#include <iostream>
 #include <string>
 #include <thread>
 #include <zmq_addon.hpp>
 
 constexpr int MAX_CONTEXT_THREAD_COUNT = 1;
 constexpr int BINDING_DELAY = 200;
+constexpr int SOCKET_TIMEOUT = 100;
 constexpr int SUBSCRIBER_INTERVAL_MILLIS = 1;
 
 Subscriber::Subscriber()
@@ -22,6 +22,7 @@ Subscriber::Subscriber()
   try {
     m_socket->connect("tcp://0.0.0.0:" + m_port);
     std::this_thread::sleep_for(std::chrono::milliseconds(BINDING_DELAY)); // Minor sleep to allow the socket to bind
+    m_socket->set(zmq::sockopt::rcvtimeo, SOCKET_TIMEOUT);
   } catch (zmq::error_t &e) {
     Logger::critical("Zmq subscribe error: " + std::string(e.what()));
   }
@@ -66,15 +67,15 @@ void Subscriber::stop() {
 
   m_isRunning = false;
 
-  // Unsubscribe from all topics
-  for (const auto &entry : m_latestMessages) {
-    m_socket->set(zmq::sockopt::unsubscribe, entry.first.ToStdString());
-  }
-
   m_stepTimer.cancel();
 
   if (m_stepTimerThread.joinable()) {
     m_stepTimerThread.join();
+  }
+
+  // Unsubscribe from all topics
+  for (const auto &entry : m_latestMessages) {
+    m_socket->set(zmq::sockopt::unsubscribe, entry.first.ToStdString());
   }
 }
 
@@ -98,7 +99,7 @@ void Subscriber::step(boost::system::error_code const &errorCode) {
   std::vector<zmq::message_t> recvMsgs;
   zmq::recv_result_t result = zmq::recv_multipart(*m_socket, std::back_inserter(recvMsgs));
 
-  if (result && *result == 2) {
+  if (result and *result == 2) {
     std::string topic = recvMsgs.at(0).to_string();
     std::string message;
 
@@ -115,8 +116,6 @@ void Subscriber::step(boost::system::error_code const &errorCode) {
     m_onMessageReceivedCallback(messageJson);
 
     m_latestMessages[topic] = message;
-  } else {
-    std::cerr << "Received unexpected message format" << std::endl;
   }
 
   // Reschedule the timer for the next step
