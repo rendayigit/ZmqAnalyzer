@@ -24,7 +24,7 @@ SubscriberPanel::SubscriberPanel(wxWindow *parent)
                                   wxDefaultPosition, wxSize(ADDRESS_WIDTH, -1), wxTE_PROCESS_ENTER);
   topicLbl = new wxStaticText(this, wxID_ANY, "Subscribe to topics:");
   topicTxtCtrl = new wxTextCtrl(this, wxID_ANY, "TIME", wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
-  topicTxtCtrl->SetToolTip("Enter topics to subscribe to, separated by commas. Then click 'Start subscriber'.");
+  topicTxtCtrl->SetToolTip("Enter topics to subscribe to, separated by commas. Then click 'Start'.");
 
   topSzr->Add(addressLbl, 0, WX_CENTER, wxSizerFlags::GetDefaultBorder());
   topSzr->Add(addressTxtCtrl, 0, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
@@ -36,10 +36,12 @@ SubscriberPanel::SubscriberPanel(wxWindow *parent)
   messageListCtrl->AppendColumn(new wxDataViewColumn("Message", new wxDataViewTextRenderer(), 1));
   messageSzr->Add(messageListCtrl, 1, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
 
-  startSubBtn = new wxButton(this, wxID_ANY, "Start subscriber");
+  startSubBtn = new wxButton(this, wxID_ANY, "Start");
+  stopSubBtn = new wxButton(this, wxID_ANY, "Stop");
 
   controlsSzr->AddStretchSpacer(1);
   controlsSzr->Add(startSubBtn, 0, WX_ALIGN_CENTER_VERTICAL, wxSizerFlags::GetDefaultBorder());
+  controlsSzr->Add(stopSubBtn, 0, WX_ALIGN_CENTER_VERTICAL, wxSizerFlags::GetDefaultBorder());
 
   mainSzr->Add(topSzr, 0, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
   mainSzr->Add(messageSzr, 1, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
@@ -48,6 +50,8 @@ SubscriberPanel::SubscriberPanel(wxWindow *parent)
   SetSizer(mainSzr);
 
   startSubBtn->Bind(wxEVT_BUTTON, &SubscriberPanel::onStartSubscriber, this);
+  stopSubBtn->Bind(wxEVT_BUTTON, &SubscriberPanel::onStopSubscriber, this);
+  topicTxtCtrl->Bind(wxEVT_TEXT_ENTER, &SubscriberPanel::onStartSubscriber, this);
   messageListCtrl->Bind(wxEVT_DATAVIEW_ITEM_ACTIVATED, &SubscriberPanel::onMessageSelected, this);
 
   Subscriber::getInstance().setOnMessageReceivedCallback([&](nlohmann::json const &message) {
@@ -79,6 +83,13 @@ void SubscriberPanel::onStartSubscriber( // NOLINT(readability-convert-member-fu
     topics.push_back(tokenizer.GetNextToken().ToStdString());
   }
   Subscriber::getInstance().start(topics);
+
+  event.Skip();
+}
+
+void SubscriberPanel::onStopSubscriber( // NOLINT(readability-convert-member-functions-to-static)
+    wxCommandEvent &event) {
+  Subscriber::getInstance().stop();
 
   event.Skip();
 }

@@ -11,6 +11,7 @@ public:
 
 private:
   void onStartSubscriber(wxCommandEvent &event);
+  void onStopSubscriber(wxCommandEvent &event);
   void onMessageSelected(wxDataViewEvent &event);
 
   wxBoxSizer *mainSzr;
@@ -27,6 +28,7 @@ private:
   wxDataViewListCtrl *messageListCtrl;
 
   wxButton *startSubBtn;
+  wxButton *stopSubBtn;
 
   std::map<wxString, TopicFrame *> m_topicFrames;
 };
