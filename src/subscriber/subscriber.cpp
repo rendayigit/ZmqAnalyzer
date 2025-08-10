@@ -48,8 +48,12 @@ void Subscriber::start(const std::vector<std::string> &topics) {
     stop();
   }
 
-  for (const auto &topic : topics) {
-    m_socket->set(zmq::sockopt::subscribe, topic);
+  if (topics.empty()) {
+    m_socket->set(zmq::sockopt::subscribe, "");
+  } else {
+    for (const auto &topic : topics) {
+      m_socket->set(zmq::sockopt::subscribe, topic);
+    }
   }
 
   m_isRunning = true;

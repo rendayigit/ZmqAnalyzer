@@ -33,7 +33,6 @@ SubscriberPanel::SubscriberPanel(wxWindow *parent)
   topSzr->Add(topicTxtCtrl, 1, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
 
   messageListCtrl = new wxListCtrl(this, wxID_ANY, wxDefaultPosition, wxSize(MESSAGE_LIST_CTRL_WIDTH, -1), wxLC_REPORT);
-
   messageListCtrl->InsertColumn(0, "Topic", wxLIST_FORMAT_LEFT, MESSAGE_LIST_CTRL_TOPIC_WIDTH);
   messageListCtrl->InsertColumn(1, "Message", wxLIST_FORMAT_LEFT, MESSAGE_LIST_CTRL_MESSAGE_WIDTH);
 
