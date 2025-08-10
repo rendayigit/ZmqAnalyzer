@@ -8,7 +8,7 @@
 // Topic frame class
 class TopicFrame : public wxFrame {
 public:
-  explicit TopicFrame(const wxString &topic, const std::function<void()> &onDestroy);
+  explicit TopicFrame(wxPanel *parent, const wxString &topic, const std::function<void()> &onDestroy);
   ~TopicFrame() override;
   void updateMessage(const wxString &message);
 

@@ -5,6 +5,7 @@
 #include <map>
 #include <nlohmann/json.hpp>
 #include <string>
+#include <vector>
 #include <wx/string.h>
 #include <zmq.hpp>
 
@@ -17,7 +18,7 @@ public:
 
   virtual ~Subscriber();
 
-  void start();
+  void start(const std::vector<std::string> &topics);
   void stop();
 
   std::string getPort() const { return m_port; }

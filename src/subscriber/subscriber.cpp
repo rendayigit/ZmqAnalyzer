@@ -3,14 +3,14 @@
 #include "logger.hpp"
 
 #include <chrono>
+#include <iostream>
 #include <string>
 #include <thread>
 #include <zmq_addon.hpp>
 
 constexpr int MAX_CONTEXT_THREAD_COUNT = 1;
 constexpr int BINDING_DELAY = 200;
-constexpr int SUBSCRIBER_DELAY_MILLIS = 200;
-constexpr int SUBSCRIBER_INTERVAL_MILLIS = 100;
+constexpr int SUBSCRIBER_INTERVAL_MILLIS = 1;
 
 Subscriber::Subscriber()
     : m_port("12345"),
@@ -25,9 +25,6 @@ Subscriber::Subscriber()
   } catch (zmq::error_t &e) {
     Logger::critical("Zmq subscribe error: " + std::string(e.what()));
   }
-
-  // Subscribe to TIME topic
-  m_socket->set(zmq::sockopt::subscribe, "TIME");
 }
 
 Subscriber::~Subscriber() {
@@ -45,15 +42,19 @@ Subscriber::~Subscriber() {
   delete m_context;
 }
 
-void Subscriber::start() {
+void Subscriber::start(const std::vector<std::string> &topics) {
   if (m_isRunning) {
-    return;
+    stop();
+  }
+
+  for (const auto &topic : topics) {
+    m_socket->set(zmq::sockopt::subscribe, topic);
   }
 
   m_isRunning = true;
 
   m_stepTimerThread = std::thread([this]() {
-    m_stepTimer.expires_from_now(boost::posix_time::milliseconds(SUBSCRIBER_DELAY_MILLIS));
+    m_stepTimer.expires_from_now(boost::posix_time::milliseconds(0));
     step(boost::system::error_code());
   });
 }
@@ -64,6 +65,11 @@ void Subscriber::stop() {
   }
 
   m_isRunning = false;
+
+  // Unsubscribe from all topics
+  for (const auto &entry : m_latestMessages) {
+    m_socket->set(zmq::sockopt::unsubscribe, entry.first.ToStdString());
+  }
 
   m_stepTimer.cancel();
 
@@ -91,24 +97,27 @@ void Subscriber::step(boost::system::error_code const &errorCode) {
   // Receive all parts of the message
   std::vector<zmq::message_t> recvMsgs;
   zmq::recv_result_t result = zmq::recv_multipart(*m_socket, std::back_inserter(recvMsgs));
-  assert(result && "\n>>> recv failed");
-  assert(*result == 2);
 
-  std::string topic = recvMsgs.at(0).to_string();
-  std::string message;
-  try {
-    nlohmann::json msgJson = nlohmann::json::parse(recvMsgs.at(1).to_string());
-    message = msgJson.dump(2);
-  } catch (const nlohmann::json::parse_error &) {
-    message = recvMsgs.at(1).to_string();
+  if (result && *result == 2) {
+    std::string topic = recvMsgs.at(0).to_string();
+    std::string message;
+
+    try {
+      nlohmann::json msgJson = nlohmann::json::parse(recvMsgs.at(1).to_string());
+      message = msgJson.dump(2);
+    } catch (const nlohmann::json::parse_error &) {
+      message = recvMsgs.at(1).to_string();
+    }
+
+    nlohmann::json messageJson;
+    messageJson["topic"] = topic;
+    messageJson["message"] = message;
+    m_onMessageReceivedCallback(messageJson);
+
+    m_latestMessages[topic] = message;
+  } else {
+    std::cerr << "Received unexpected message format" << std::endl;
   }
-
-  nlohmann::json messageJson;
-  messageJson["topic"] = topic;
-  messageJson["message"] = message;
-  m_onMessageReceivedCallback(messageJson);
-
-  m_latestMessages[topic] = message;
 
   // Reschedule the timer for the next step
   if (not errorCode) {

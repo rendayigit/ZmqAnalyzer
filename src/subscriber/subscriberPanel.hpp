@@ -14,12 +14,15 @@ private:
   void onMessageSelected(wxListEvent &event);
 
   wxBoxSizer *mainSzr;
-  wxBoxSizer *addressSzr;
+  wxBoxSizer *topSzr;
   wxBoxSizer *messageSzr;
   wxBoxSizer *controlsSzr;
 
   wxStaticText *addressLbl;
   wxTextCtrl *addressTxtCtrl;
+
+  wxStaticText *topicLbl;
+  wxTextCtrl *topicTxtCtrl;
 
   wxListCtrl *messageListCtrl;
 

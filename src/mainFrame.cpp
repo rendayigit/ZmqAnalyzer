@@ -1,22 +1,22 @@
 #include "mainFrame.hpp"
 
 #include "subscriber/subscriberPanel.hpp"
+#include "wxConstants.hpp"
 
 #include <wx/defs.h>
 #include <wx/notebook.h>
 #include <wx/textctrl.h>
 
-constexpr int MAIN_WINDOW_SIZE_X = 800;
+constexpr int MAIN_WINDOW_SIZE_X = 1000;
 constexpr int MAIN_WINDOW_SIZE_Y = 600;
 
 // Main frame constructor
 MainFrame::MainFrame()
-    : wxFrame(nullptr, wxID_ANY, "Template Wx Cpp GUI Application", wxDefaultPosition,
-              wxSize(MAIN_WINDOW_SIZE_X, MAIN_WINDOW_SIZE_Y)) {
+    : wxFrame(nullptr, wxID_ANY, "ZeroMQ Analyzer", wxDefaultPosition, wxSize(MAIN_WINDOW_SIZE_X, MAIN_WINDOW_SIZE_Y)),
+      sizer(new wxBoxSizer(wxVERTICAL)) {
 
   // Create menu bar
   auto *menuFile = new wxMenu;
-  auto *helloMenuItem = menuFile->Append(wxID_ANY, "&Hello...\tCtrl-H", "Show hello dialog");
   menuFile->AppendSeparator();
   menuFile->Append(wxID_EXIT);
 
@@ -31,7 +31,7 @@ MainFrame::MainFrame()
 
   // Create status bar
   CreateStatusBar();
-  SetStatusText("Welcome to wxWidgets!");
+  SetStatusText("Welcome to ZeroMQ Analyzer!");
 
   // Create main panel
   panel = new wxPanel(this, wxID_ANY);
@@ -40,19 +40,17 @@ MainFrame::MainFrame()
   notebook = new wxNotebook(panel, wxID_ANY);
 
   // Create tab panels
-  subscriber = new SubscriberPanel(notebook);
+  subscriber = new SubscriberPanel(notebook); // NOLINT(cppcoreguidelines-prefer-member-initializer)
 
   // Add tabs to notebook
   notebook->AddPage(subscriber, "Subscriber");
 
   // Layout notebook in main panel
-  sizer = new wxBoxSizer(wxVERTICAL);
-  sizer->Add(notebook, 1, wxALL | wxEXPAND, wxSizerFlags::GetDefaultBorder());
+  sizer->Add(notebook, 1, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
   panel->SetSizer(sizer);
 
   Bind(wxEVT_MENU, &MainFrame::onExit, this, wxID_EXIT);
   Bind(wxEVT_MENU, &MainFrame::onAbout, this, wxID_ABOUT);
-  Bind(wxEVT_MENU, &MainFrame::onHello, this, helloMenuItem->GetId());
 }
 
 void MainFrame::onExit(wxCommandEvent &event) {
@@ -60,14 +58,9 @@ void MainFrame::onExit(wxCommandEvent &event) {
   event.Skip();
 }
 
-// TODO: Implement
 void MainFrame::onAbout(wxCommandEvent &event) { // NOLINT(readability-convert-member-functions-to-static)
-  wxMessageBox("ZMQ Analyzer", "About", wxOK | wxICON_INFORMATION); // NOLINT(hicpp-signed-bitwise)
-  event.Skip();
-}
-
-// TODO: Implement
-void MainFrame::onHello(wxCommandEvent &event) { // NOLINT(readability-convert-member-functions-to-static)
-  wxLogMessage("Hello");
+  wxMessageBox("This application allows you to transmit and receive messages using ZeroMQ.\nPlease refer to "
+               "https://github.com/rendayigit/ZmqAnalyzer for more information.",
+               "About ZeroMQ Analyzer", wxOK | wxICON_INFORMATION); // NOLINT(hicpp-signed-bitwise)
   event.Skip();
 }

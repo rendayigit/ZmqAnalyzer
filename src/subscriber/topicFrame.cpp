@@ -11,8 +11,8 @@ constexpr int UPDATE_INTERVAL_MILLIS = 100;
 constexpr int TOPIC_FRAME_WIDTH = 400;
 constexpr int TOPIC_FRAME_HEIGHT = 300;
 
-TopicFrame::TopicFrame(const wxString &topic, const std::function<void()> &onDestroy)
-    : wxFrame(nullptr, wxID_ANY, "[TOPIC]", wxDefaultPosition, wxSize(TOPIC_FRAME_WIDTH, TOPIC_FRAME_HEIGHT)),
+TopicFrame::TopicFrame(wxPanel *parent, const wxString &topic, const std::function<void()> &onDestroy)
+    : wxFrame(parent, wxID_ANY, "[TOPIC]", wxDefaultPosition, wxSize(TOPIC_FRAME_WIDTH, TOPIC_FRAME_HEIGHT)),
       m_onDestroyCallback(onDestroy),
       m_updateWorker(m_updateService),
       m_updateWorkerThread([&] { m_updateService.run(); }),
