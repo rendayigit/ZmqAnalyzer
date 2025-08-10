@@ -48,7 +48,7 @@ SubscriberPanel::SubscriberPanel(wxWindow *parent)
   SetSizer(mainSzr);
 
   startSubBtn->Bind(wxEVT_BUTTON, &SubscriberPanel::onStartSubscriber, this);
-  messageListCtrl->Bind(wxEVT_DATAVIEW_SELECTION_CHANGED, &SubscriberPanel::onMessageSelected, this);
+  messageListCtrl->Bind(wxEVT_DATAVIEW_ITEM_ACTIVATED, &SubscriberPanel::onMessageSelected, this);
 
   Subscriber::getInstance().setOnMessageReceivedCallback([&](nlohmann::json const &message) {
     wxString topic = message["topic"];
