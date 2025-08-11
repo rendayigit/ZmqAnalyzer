@@ -11,6 +11,7 @@ constexpr int MESSAGE_LIST_CTRL_TOPIC_WIDTH = 100;
 constexpr int MESSAGE_LIST_CTRL_MESSAGE_WIDTH = 850;
 constexpr int MESSAGE_LIST_CTRL_WIDTH = MESSAGE_LIST_CTRL_TOPIC_WIDTH + MESSAGE_LIST_CTRL_MESSAGE_WIDTH;
 constexpr int MAX_MESSAGE_COUNT = 100;
+constexpr int MAX_MESSAGE_LENGTH = 135;
 
 SubscriberPanel::SubscriberPanel(wxWindow *parent)
     : wxPanel(parent, wxID_ANY),
@@ -55,8 +56,9 @@ SubscriberPanel::SubscriberPanel(wxWindow *parent)
   messageListCtrl->Bind(wxEVT_DATAVIEW_ITEM_ACTIVATED, &SubscriberPanel::onMessageSelected, this);
 
   Subscriber::getInstance().setOnMessageReceivedCallback([&](nlohmann::json const &message) {
-    wxString topic = message["topic"];
-    wxString msg = message["message"];
+    wxString topic = message["topic"].get<std::string>();
+    wxString msg = message["message"].get<std::string>().substr(0, MAX_MESSAGE_LENGTH) + " ...";
+
     wxTheApp->CallAfter([=]() { // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
       wxVector<wxVariant> row;
       row.push_back(wxVariant(topic));
