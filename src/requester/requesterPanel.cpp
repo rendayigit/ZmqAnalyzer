@@ -13,6 +13,7 @@ RequesterPanel::RequesterPanel(wxWindow *parent)
       mainSzr(new wxBoxSizer(wxVERTICAL)),
       topSzr(new wxBoxSizer(wxHORIZONTAL)),
       messageSzr(new wxBoxSizer(wxHORIZONTAL)),
+      requestSzr(new wxBoxSizer(wxVERTICAL)),
       controlsSzr(new wxBoxSizer(wxHORIZONTAL)) {
 
   addressLbl = new wxStaticText(this, wxID_ANY, "Request from address:");
@@ -24,10 +25,17 @@ RequesterPanel::RequesterPanel(wxWindow *parent)
 
   requestTxtCtrl = new wxTextCtrl(this, wxID_ANY, "Enter your message here", wxDefaultPosition,
                                   wxSize(REQUEST_TEXT_AREA_WIDTH, -1), wxTE_MULTILINE);
-  messageSzr->Add(requestTxtCtrl, 0, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
+  requestSzr->Add(requestTxtCtrl, 1, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
+
+  recentRequestsListCtrl = new wxListCtrl(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT);
+  recentRequestsListCtrl->InsertColumn(0, "Recent Requests", wxLIST_FORMAT_LEFT, REQUEST_TEXT_AREA_WIDTH);
+
+  requestSzr->Add(recentRequestsListCtrl, 1, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
 
   responseTxtCtrl = new wxTextCtrl(this, wxID_ANY, "Response will be displayed here", wxDefaultPosition, wxDefaultSize,
                                    WX_MULTILINE_READONLY);
+
+  messageSzr->Add(requestSzr, 1, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
   messageSzr->Add(responseTxtCtrl, 1, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
 
   requestBtn = new wxButton(this, wxID_ANY, "Send request");
@@ -42,18 +50,43 @@ RequesterPanel::RequesterPanel(wxWindow *parent)
   SetSizer(mainSzr);
 
   requestBtn->Bind(wxEVT_BUTTON, &RequesterPanel::onSendRequest, this);
+  recentRequestsListCtrl->Bind(wxEVT_LIST_ITEM_ACTIVATED, &RequesterPanel::onRequestResponseSelected, this);
 }
 
 void RequesterPanel::onSendRequest(wxCommandEvent &event) { // NOLINT(readability-convert-member-functions-to-static)
   // TODO: Use address and port provided in the UI
 
-  std::string response = Requester::getInstance().request(requestTxtCtrl->GetValue().ToStdString());
+  std::string request = requestTxtCtrl->GetValue().ToStdString();
+  std::string response = Requester::getInstance().request(request);
 
   try {
     nlohmann::json responseJson = nlohmann::json::parse(response);
     responseTxtCtrl->SetValue(responseJson.dump(2));
   } catch (const nlohmann::json::parse_error &) {
     responseTxtCtrl->SetValue(response);
+  }
+
+  bool isItemFound = false;
+  for (int i = 0; i < recentRequestsListCtrl->GetItemCount(); ++i) {
+    if (request == recentRequestsListCtrl->GetItemText(i)) {
+      isItemFound = true;
+      break;
+    }
+  }
+
+  if (not isItemFound) {
+    recentRequestsListCtrl->InsertItem(0, request);
+  }
+
+  event.Skip();
+}
+
+void RequesterPanel::onRequestResponseSelected(wxListEvent &event) {
+  long itemIndex = event.GetIndex();
+
+  if (itemIndex != -1) {
+    wxString selectedRequestMessage = recentRequestsListCtrl->GetItemText(itemIndex);
+    requestTxtCtrl->SetValue(selectedRequestMessage);
   }
 
   event.Skip();
