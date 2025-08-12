@@ -105,15 +105,14 @@ void SubscriberPanel::onMessageSelected(wxDataViewEvent &event) {
     return;
   }
 
+  // Get topic from selected list item
   int row = messageListCtrl->ItemToRow(item);
   wxVariant topicVariant;
-  wxVariant messageVariant;
-
-  messageListCtrl->GetValue(topicVariant, row, 0);   // Topic column
-  messageListCtrl->GetValue(messageVariant, row, 1); // Message column
-
+  messageListCtrl->GetValue(topicVariant, row, 0);
   wxString topic = topicVariant.GetString();
-  wxString message = messageVariant.GetString();
+
+  // Get most recent version, full message of topic from subscriber
+  wxString message = Subscriber::getInstance().getLatestMessage(topic);
 
   if (m_topicFrames.find(topic) == m_topicFrames.end() or m_topicFrames[topic] == nullptr) {
     auto *topicFrame = new TopicFrame(this, topic, [=]() { m_topicFrames.erase(topic); });
