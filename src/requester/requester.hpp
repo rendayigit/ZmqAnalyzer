@@ -12,15 +12,15 @@ public:
 
   ~Requester();
 
-  std::string request(const std::string &message);
+  std::string request(const std::string &message, const std::string &connectionAddress);
 
-  std::string getPort() const { return m_port; }
+  std::string getConnectionAddress() const { return m_connectionAddress; }
 
 private:
   Requester();
   void resetSocket();
 
-  std::string m_port;
+  std::string m_connectionAddress;
   zmq::context_t *m_context;
   zmq::socket_t *m_socket;
 };

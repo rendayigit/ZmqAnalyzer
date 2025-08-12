@@ -21,8 +21,8 @@ SubscriberPanel::SubscriberPanel(wxWindow *parent)
       controlsSzr(new wxBoxSizer(wxHORIZONTAL)) {
 
   addressLbl = new wxStaticText(this, wxID_ANY, "Subscribe to address:");
-  addressTxtCtrl = new wxTextCtrl(this, wxID_ANY, "tcp://localhost:" + Subscriber::getInstance().getPort(),
-                                  wxDefaultPosition, wxSize(ADDRESS_WIDTH, -1), wxTE_PROCESS_ENTER);
+  addressTxtCtrl = new wxTextCtrl(this, wxID_ANY, Subscriber::getInstance().getConnectionAddress(), wxDefaultPosition,
+                                  wxSize(ADDRESS_WIDTH, -1), wxTE_PROCESS_ENTER);
   topicLbl = new wxStaticText(this, wxID_ANY, "Subscribe to topics:");
   topicTxtCtrl = new wxTextCtrl(this, wxID_ANY, "TIME", wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
   topicTxtCtrl->SetToolTip("Enter topics to subscribe to, separated by commas. Then click 'Start'.");
@@ -80,14 +80,12 @@ SubscriberPanel::SubscriberPanel(wxWindow *parent)
 void SubscriberPanel::onStartSubscriber( // NOLINT(readability-convert-member-functions-to-static)
     wxCommandEvent &event) {
 
-  // TODO: Use address and port provided in the UI
-
   std::vector<std::string> topics;
   wxStringTokenizer tokenizer(topicTxtCtrl->GetValue(), ",");
   while (tokenizer.HasMoreTokens()) {
     topics.push_back(tokenizer.GetNextToken().ToStdString());
   }
-  Subscriber::getInstance().start(topics);
+  Subscriber::getInstance().start(topics, addressTxtCtrl->GetValue().ToStdString());
 
   event.Skip();
 }

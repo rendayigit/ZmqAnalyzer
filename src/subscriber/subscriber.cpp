@@ -1,8 +1,10 @@
 #include "subscriber.hpp"
 
+#include "common.hpp"
 #include "logger.hpp"
 
 #include <chrono>
+#include <fstream>
 #include <string>
 #include <thread>
 #include <zmq_addon.hpp>
@@ -13,16 +15,19 @@ constexpr int SOCKET_TIMEOUT = 100;
 constexpr int SUBSCRIBER_INTERVAL_MILLIS = 10;
 
 Subscriber::Subscriber()
-    : m_port("12345"),
-      m_context(new zmq::context_t(MAX_CONTEXT_THREAD_COUNT)),
+    : m_context(new zmq::context_t(MAX_CONTEXT_THREAD_COUNT)),
       m_socket(new zmq::socket_t(*m_context, zmq::socket_type::sub)),
       m_subscriberWorker(m_subscriberService),
       m_subscriberWorkerThread([&] { m_subscriberService.run(); }),
       m_stepTimer(m_subscriberService) {
   try {
-    m_socket->connect("tcp://0.0.0.0:" + m_port);
-    std::this_thread::sleep_for(std::chrono::milliseconds(BINDING_DELAY)); // Minor sleep to allow the socket to bind
+    nlohmann::json config;
+    std::ifstream configFile(getExecutableDirectory() + "/config.json");
+    configFile >> config;
+    m_connectionAddress = config["subscriber_address"].get<std::string>();
     m_socket->set(zmq::sockopt::rcvtimeo, SOCKET_TIMEOUT);
+    m_socket->connect(m_connectionAddress);
+    std::this_thread::sleep_for(std::chrono::milliseconds(BINDING_DELAY)); // Minor sleep to allow the socket to bind
   } catch (zmq::error_t &e) {
     Logger::critical("Zmq subscribe error: " + std::string(e.what()));
   }
@@ -43,10 +48,17 @@ Subscriber::~Subscriber() {
   delete m_context;
 }
 
-void Subscriber::start(const std::vector<std::string> &topics) {
-  if (m_isRunning) {
+void Subscriber::start(const std::vector<std::string> &topics, const std::string &connectionAddress) {
+  if (not connectionAddress.empty() and connectionAddress != m_connectionAddress) {
+    stop();
+    m_connectionAddress = connectionAddress;
+  } else if (m_isRunning) {
     stop();
   }
+
+  m_socket = new zmq::socket_t(*m_context, zmq::socket_type::sub);
+  m_socket->set(zmq::sockopt::rcvtimeo, SOCKET_TIMEOUT);
+  m_socket->connect(m_connectionAddress);
 
   if (topics.empty()) {
     m_socket->set(zmq::sockopt::subscribe, "");
@@ -81,6 +93,8 @@ void Subscriber::stop() {
   for (const auto &entry : m_latestMessages) {
     m_socket->set(zmq::sockopt::unsubscribe, entry.first.ToStdString());
   }
+
+  m_socket->close();
 }
 
 wxString Subscriber::getLatestMessage(const wxString &topic) {

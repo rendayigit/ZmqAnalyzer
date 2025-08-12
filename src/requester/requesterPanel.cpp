@@ -17,8 +17,8 @@ RequesterPanel::RequesterPanel(wxWindow *parent)
       controlsSzr(new wxBoxSizer(wxHORIZONTAL)) {
 
   addressLbl = new wxStaticText(this, wxID_ANY, "Request from address:");
-  addressTxtCtrl = new wxTextCtrl(this, wxID_ANY, "tcp://localhost:" + Requester::getInstance().getPort(),
-                                  wxDefaultPosition, wxSize(ADDRESS_WIDTH, -1), wxTE_PROCESS_ENTER);
+  addressTxtCtrl = new wxTextCtrl(this, wxID_ANY, Requester::getInstance().getConnectionAddress(), wxDefaultPosition,
+                                  wxSize(ADDRESS_WIDTH, -1), wxTE_PROCESS_ENTER);
 
   topSzr->Add(addressLbl, 0, WX_CENTER, wxSizerFlags::GetDefaultBorder());
   topSzr->Add(addressTxtCtrl, 0, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
@@ -54,10 +54,8 @@ RequesterPanel::RequesterPanel(wxWindow *parent)
 }
 
 void RequesterPanel::onSendRequest(wxCommandEvent &event) { // NOLINT(readability-convert-member-functions-to-static)
-  // TODO: Use address and port provided in the UI
-
   std::string request = requestTxtCtrl->GetValue().ToStdString();
-  std::string response = Requester::getInstance().request(request);
+  std::string response = Requester::getInstance().request(request, addressTxtCtrl->GetValue().ToStdString());
 
   try {
     nlohmann::json responseJson = nlohmann::json::parse(response);

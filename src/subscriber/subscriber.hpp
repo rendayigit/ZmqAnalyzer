@@ -18,10 +18,10 @@ public:
 
   virtual ~Subscriber();
 
-  void start(const std::vector<std::string> &topics);
+  void start(const std::vector<std::string> &topics, const std::string &connectionAddress);
   void stop();
 
-  std::string getPort() const { return m_port; }
+  std::string getConnectionAddress() const { return m_connectionAddress; }
 
   void setOnMessageReceivedCallback(const std::function<void(nlohmann::json const &)> &onMessageReceivedCallback) {
     m_onMessageReceivedCallback = onMessageReceivedCallback;
@@ -35,7 +35,7 @@ private:
   void step(boost::system::error_code const &errorCode);
   std::function<void(nlohmann::json const &)> m_onMessageReceivedCallback;
 
-  std::string m_port;
+  std::string m_connectionAddress;
   zmq::context_t *m_context;
   zmq::socket_t *m_socket;
 
