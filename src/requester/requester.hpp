@@ -18,6 +18,7 @@ public:
 
 private:
   Requester();
+  void resetSocket();
 
   std::string m_port;
   zmq::context_t *m_context;
