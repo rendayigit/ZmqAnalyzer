@@ -9,6 +9,7 @@
 #include <thread>
 #include <zmq_addon.hpp>
 
+const std::string CONFIG_ADDRESS_KEY = "subscriber_address";
 constexpr int MAX_CONTEXT_THREAD_COUNT = 1;
 constexpr int BINDING_DELAY = 200;
 constexpr int SOCKET_TIMEOUT = 100;
@@ -22,15 +23,31 @@ Subscriber::Subscriber()
       m_stepTimer(m_subscriberService) {
   try {
     nlohmann::json config;
-    std::ifstream configFile(getExecutableDirectory() + "/config.json");
-    configFile >> config;
-    m_connectionAddress = config["subscriber_address"].get<std::string>();
-    m_socket->set(zmq::sockopt::rcvtimeo, SOCKET_TIMEOUT);
-    m_socket->connect(m_connectionAddress);
-    std::this_thread::sleep_for(std::chrono::milliseconds(BINDING_DELAY)); // Minor sleep to allow the socket to bind
+    std::string configPath = getExecutableDirectory() + "/config.json";
+    std::ifstream configFile(configPath);
+
+    if (not configFile.is_open()) {
+      throw std::runtime_error("Failed to open config file: " + configPath);
+    }
+
+    try {
+      configFile >> config;
+
+      if (not config.contains(CONFIG_ADDRESS_KEY) or not config[CONFIG_ADDRESS_KEY].is_string()) {
+        throw std::runtime_error("Config file missing or invalid 'subscriber_address'");
+      }
+
+      m_connectionAddress = config[CONFIG_ADDRESS_KEY].get<std::string>();
+    } catch (const std::exception &e) {
+      throw std::runtime_error(std::string("Error reading config file: ") + e.what());
+    }
   } catch (zmq::error_t &e) {
     Logger::critical("Zmq subscribe error: " + std::string(e.what()));
   }
+
+  m_socket->set(zmq::sockopt::rcvtimeo, SOCKET_TIMEOUT);
+  m_socket->connect(m_connectionAddress);
+  std::this_thread::sleep_for(std::chrono::milliseconds(BINDING_DELAY)); // Minor sleep to allow the socket to bind
 }
 
 Subscriber::~Subscriber() {

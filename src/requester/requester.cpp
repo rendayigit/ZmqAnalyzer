@@ -5,6 +5,7 @@
 #include <fstream>
 #include <nlohmann/json.hpp>
 
+const std::string CONFIG_ADDRESS_KEY = "requester_address";
 constexpr int MAX_CONTEXT_THREAD_COUNT = 1;
 constexpr int SOCKET_TIMEOUT = 100;
 
@@ -12,9 +13,25 @@ Requester::Requester()
     : m_context(new zmq::context_t(MAX_CONTEXT_THREAD_COUNT)),
       m_socket(new zmq::socket_t(*m_context, zmq::socket_type::req)) {
   nlohmann::json config;
-  std::ifstream configFile(getExecutableDirectory() + "/config.json");
-  configFile >> config;
-  m_connectionAddress = config["requester_address"].get<std::string>();
+  std::string configPath = getExecutableDirectory() + "/config.json";
+  std::ifstream configFile(configPath);
+
+  if (not configFile.is_open()) {
+    throw std::runtime_error("Failed to open config file: " + configPath);
+  }
+
+  try {
+    configFile >> config;
+
+    if (not config.contains(CONFIG_ADDRESS_KEY) or not config[CONFIG_ADDRESS_KEY].is_string()) {
+      throw std::runtime_error("Config file missing or invalid 'requester_address'");
+    }
+
+    m_connectionAddress = config[CONFIG_ADDRESS_KEY].get<std::string>();
+  } catch (const std::exception &e) {
+    throw std::runtime_error(std::string("Error reading config file: ") + e.what());
+  }
+
   m_socket->set(zmq::sockopt::rcvtimeo, SOCKET_TIMEOUT);
   m_socket->connect(m_connectionAddress);
 }
