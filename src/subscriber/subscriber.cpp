@@ -21,32 +21,35 @@ Subscriber::Subscriber()
       m_subscriberWorker(m_subscriberService),
       m_subscriberWorkerThread([&] { m_subscriberService.run(); }),
       m_stepTimer(m_subscriberService) {
+  nlohmann::json config;
+  std::string configPath = getExecutableDirectory() + "/config.json";
+  std::ifstream configFile(configPath);
+
+  if (not configFile.is_open()) {
+    throw std::runtime_error("Failed to open config file: " + configPath);
+  }
+
   try {
-    nlohmann::json config;
-    std::string configPath = getExecutableDirectory() + "/config.json";
-    std::ifstream configFile(configPath);
+    configFile >> config;
 
-    if (not configFile.is_open()) {
-      throw std::runtime_error("Failed to open config file: " + configPath);
+    if (not config.contains(CONFIG_ADDRESS_KEY) or not config[CONFIG_ADDRESS_KEY].is_string()) {
+      throw std::runtime_error("Config file missing or invalid '" + CONFIG_ADDRESS_KEY + "'");
     }
 
-    try {
-      configFile >> config;
-
-      if (not config.contains(CONFIG_ADDRESS_KEY) or not config[CONFIG_ADDRESS_KEY].is_string()) {
-        throw std::runtime_error("Config file missing or invalid 'subscriber_address'");
-      }
-
-      m_connectionAddress = config[CONFIG_ADDRESS_KEY].get<std::string>();
-    } catch (const std::exception &e) {
-      throw std::runtime_error(std::string("Error reading config file: ") + e.what());
-    }
-  } catch (zmq::error_t &e) {
-    Logger::critical("Zmq subscribe error: " + std::string(e.what()));
+    m_connectionAddress = config[CONFIG_ADDRESS_KEY].get<std::string>();
+  } catch (const std::exception &e) {
+    throw std::runtime_error(std::string("Error reading config file: ") + e.what());
   }
 
   m_socket->set(zmq::sockopt::rcvtimeo, SOCKET_TIMEOUT);
-  m_socket->connect(m_connectionAddress);
+
+  try {
+    m_socket->connect(m_connectionAddress);
+  } catch (const zmq::error_t &e) {
+    Logger::error("Failed to connect to: " + m_connectionAddress + " - " + std::string(e.what()));
+    return;
+  }
+
   std::this_thread::sleep_for(std::chrono::milliseconds(BINDING_DELAY)); // Minor sleep to allow the socket to bind
 }
 
@@ -68,7 +71,10 @@ Subscriber::~Subscriber() {
 void Subscriber::start(const std::vector<std::string> &topics, const std::string &connectionAddress) {
   if (not connectionAddress.empty() and connectionAddress != m_connectionAddress) {
     stop();
+
     m_connectionAddress = connectionAddress;
+
+    updateAddressInConfig(m_connectionAddress);
   } else if (m_isRunning) {
     stop();
   }
@@ -81,7 +87,13 @@ void Subscriber::start(const std::vector<std::string> &topics, const std::string
 
   m_socket = new zmq::socket_t(*m_context, zmq::socket_type::sub);
   m_socket->set(zmq::sockopt::rcvtimeo, SOCKET_TIMEOUT);
-  m_socket->connect(m_connectionAddress);
+
+  try {
+    m_socket->connect(m_connectionAddress);
+  } catch (const zmq::error_t &e) {
+    Logger::error("Failed to connect to: " + m_connectionAddress + " - " + std::string(e.what()));
+    return;
+  }
 
   if (topics.empty()) {
     m_socket->set(zmq::sockopt::subscribe, "");
@@ -186,5 +198,37 @@ void Subscriber::step(boost::system::error_code const &errorCode) {
     if (errorCode != boost::asio::error::operation_aborted) {
       Logger::warn("Subscriber step error");
     }
+  }
+}
+
+// TODO: Code repetition in this function
+void Subscriber::updateAddressInConfig(const std::string &newAddress) {
+  nlohmann::json config;
+  std::string configPath = getExecutableDirectory() + "/config.json";
+  std::ifstream configFile(configPath);
+
+  if (configFile.is_open()) {
+    try {
+      // Read the existing config
+      configFile >> config;
+      configFile.close();
+
+      // Update the subscriber address
+      config[CONFIG_ADDRESS_KEY] = newAddress;
+
+      // Write the updated config back to the file
+      std::ofstream outConfigFile(configPath, std::ios::trunc);
+
+      if (outConfigFile.is_open()) {
+        outConfigFile << config.dump(2);
+        outConfigFile.close();
+      } else {
+        Logger::warn("Could not open config file for writing: " + configPath);
+      }
+    } catch (const std::exception &e) {
+      Logger::warn("Error writing to config file: " + std::string(e.what()));
+    }
+  } else {
+    Logger::warn("Could not open config file for reading: " + configPath);
   }
 }

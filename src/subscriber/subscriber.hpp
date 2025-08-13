@@ -33,6 +33,9 @@ private:
   Subscriber();
 
   void step(boost::system::error_code const &errorCode);
+
+  static void updateAddressInConfig(const std::string &newAddress);
+
   std::function<void(nlohmann::json const &)> m_onMessageReceivedCallback;
 
   std::string m_connectionAddress;

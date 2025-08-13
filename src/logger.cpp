@@ -8,8 +8,8 @@
 
 static std::shared_ptr<spdlog::logger> getFileLogger() {
   static std::shared_ptr<spdlog::logger> logger = [] {
-    static std::string filePathName = getExecutableDirectory() + "/Galactron.log";
-    auto log = spdlog::daily_logger_mt("SIM", filePathName, 0, 0);
+    static std::string filePathName = getExecutableDirectory() + "/ZmqAnalyzer.log";
+    auto log = spdlog::daily_logger_mt("ZmqAnalyzer", filePathName, 0, 0);
     log->set_pattern("[%H:%M:%S.%f %z] [%n] [%l] [thread %t] %v");
     log->set_level(spdlog::level::trace);
     log->flush_on(spdlog::level::trace);

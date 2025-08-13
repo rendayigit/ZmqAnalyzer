@@ -20,6 +20,8 @@ private:
   Requester();
   void resetSocket();
 
+  static void updateAddressInConfig(const std::string &newAddress);
+
   std::string m_connectionAddress;
   zmq::context_t *m_context;
   zmq::socket_t *m_socket;

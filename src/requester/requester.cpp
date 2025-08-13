@@ -1,6 +1,7 @@
 #include "requester.hpp"
 
 #include "common.hpp"
+#include "logger.hpp"
 
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -24,7 +25,7 @@ Requester::Requester()
     configFile >> config;
 
     if (not config.contains(CONFIG_ADDRESS_KEY) or not config[CONFIG_ADDRESS_KEY].is_string()) {
-      throw std::runtime_error("Config file missing or invalid 'requester_address'");
+      throw std::runtime_error("Config file missing or invalid '" + CONFIG_ADDRESS_KEY + "'");
     }
 
     m_connectionAddress = config[CONFIG_ADDRESS_KEY].get<std::string>();
@@ -46,6 +47,9 @@ void Requester::resetSocket() {
 std::string Requester::request(const std::string &message, const std::string &connectionAddress) {
   if (not connectionAddress.empty() and connectionAddress != m_connectionAddress) {
     m_connectionAddress = connectionAddress;
+
+    updateAddressInConfig(m_connectionAddress);
+
     resetSocket();
   }
 
@@ -66,6 +70,38 @@ std::string Requester::request(const std::string &message, const std::string &co
   }
 
   return reply.to_string();
+}
+
+// TODO: Code repetition in this function
+void Requester::updateAddressInConfig(const std::string &newAddress) {
+  nlohmann::json config;
+  std::string configPath = getExecutableDirectory() + "/config.json";
+  std::ifstream configFile(configPath);
+
+  if (configFile.is_open()) {
+    try {
+      // Read the existing config
+      configFile >> config;
+      configFile.close();
+
+      // Update the requester address
+      config[CONFIG_ADDRESS_KEY] = newAddress;
+
+      // Write the updated config back to the file
+      std::ofstream outConfigFile(configPath, std::ios::trunc);
+
+      if (outConfigFile.is_open()) {
+        outConfigFile << config.dump(2);
+        outConfigFile.close();
+      } else {
+        Logger::warn("Could not open config file for writing: " + configPath);
+      }
+    } catch (const std::exception &e) {
+      Logger::warn("Error writing to config file: " + std::string(e.what()));
+    }
+  } else {
+    Logger::warn("Could not open config file for reading: " + configPath);
+  }
 }
 
 Requester::~Requester() {

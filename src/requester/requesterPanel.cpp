@@ -1,10 +1,15 @@
 #include "requesterPanel.hpp"
 
+#include "common.hpp"
+#include "logger.hpp"
 #include "requester.hpp"
 #include "wxConstants.hpp"
 
+#include <fstream>
 #include <nlohmann/json.hpp>
 
+const std::string CONFIG_RECENT_REQUESTS_KEY = "requester_recent_messages";
+constexpr int MAX_RECENT_REQUESTS = 25;
 constexpr int ADDRESS_WIDTH = 200;
 constexpr int REQUEST_TEXT_AREA_WIDTH = 400;
 
@@ -51,6 +56,8 @@ RequesterPanel::RequesterPanel(wxWindow *parent)
 
   requestBtn->Bind(wxEVT_BUTTON, &RequesterPanel::onSendRequest, this);
   recentRequestsListCtrl->Bind(wxEVT_LIST_ITEM_ACTIVATED, &RequesterPanel::onRequestResponseSelected, this);
+
+  populateRecentRequestsFromConfig();
 }
 
 void RequesterPanel::onSendRequest(wxCommandEvent &event) { // NOLINT(readability-convert-member-functions-to-static)
@@ -74,6 +81,7 @@ void RequesterPanel::onSendRequest(wxCommandEvent &event) { // NOLINT(readabilit
 
   if (not isItemFound) {
     recentRequestsListCtrl->InsertItem(0, request);
+    addRecentRequestToConfig(request);
   }
 
   event.Skip();
@@ -88,4 +96,67 @@ void RequesterPanel::onRequestResponseSelected(wxListEvent &event) {
   }
 
   event.Skip();
+}
+
+// TODO: Possible future code repetition in this function 
+void RequesterPanel::populateRecentRequestsFromConfig() {
+  nlohmann::json config;
+  std::string configPath = getExecutableDirectory() + "/config.json";
+  std::ifstream configFile(configPath);
+
+  if (configFile.is_open()) {
+    try {
+      configFile >> config;
+      configFile.close();
+
+      if (config.contains(CONFIG_RECENT_REQUESTS_KEY)) {
+        const auto &recentRequests = config[CONFIG_RECENT_REQUESTS_KEY];
+        
+        for (const auto &request : recentRequests) {
+          recentRequestsListCtrl->InsertItem(0, request.get<std::string>());
+        }
+      }
+    } catch (const std::exception &e) {
+      Logger::warn("Error reading recent requests from config: " + std::string(e.what()));
+    }
+  } else {
+    Logger::warn("Could not open config file for reading: " + configPath);
+  }
+}
+
+// TODO: Code repetition in this function
+void RequesterPanel::addRecentRequestToConfig(const std::string &request) {
+  nlohmann::json config;
+  std::string configPath = getExecutableDirectory() + "/config.json";
+  std::ifstream configFile(configPath);
+
+  if (configFile.is_open()) {
+    try {
+      // Read the existing config
+      configFile >> config;
+      configFile.close();
+
+      // Add the recent request
+      config[CONFIG_RECENT_REQUESTS_KEY].push_back(request);
+
+      // Limit the number of recent requests stored
+      if (config[CONFIG_RECENT_REQUESTS_KEY].size() > MAX_RECENT_REQUESTS) {
+        config[CONFIG_RECENT_REQUESTS_KEY].erase(config[CONFIG_RECENT_REQUESTS_KEY].begin());
+      }
+
+      // Write the updated config back to the file
+      std::ofstream outConfigFile(configPath, std::ios::trunc);
+
+      if (outConfigFile.is_open()) {
+        outConfigFile << config.dump(2);
+        outConfigFile.close();
+      } else {
+        Logger::warn("Could not open config file for writing: " + configPath);
+      }
+    } catch (const std::exception &e) {
+      Logger::warn("Error writing to config file: " + std::string(e.what()));
+    }
+  } else {
+    Logger::warn("Could not open config file for reading: " + configPath);
+  }
 }

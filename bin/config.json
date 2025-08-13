@@ -1,4 +1,11 @@
 {
-  "subscriber_address": "tcp://0.0.0.0:4002",
-  "requester_address": "tcp://0.0.0.0:4001"
+  "requester_address": "tcp://0.0.0.0:4001",
+  "requester_recent_messages": [
+    "{\"command\":\"sim/state\"}",
+    "{\"command\":\"sim/model-tree\"}",
+    "{\"command\":\"sim/run\"}",
+    "{\"command\":\"sim/hold\"}",
+    "{\"command\":\"sim/speed\", \"payload\": {\"speed\":1.0}}"
+  ],
+  "subscriber_address": "tcp://0.0.0.0:4002"
 }
