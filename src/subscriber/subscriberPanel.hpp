@@ -17,7 +17,6 @@ private:
 
   wxBoxSizer *mainSzr;
   wxBoxSizer *topSzr;
-  wxBoxSizer *messageSzr;
   wxBoxSizer *controlsSzr;
 
   wxStaticText *addressLbl;
@@ -25,6 +24,8 @@ private:
 
   wxStaticText *topicLbl;
   wxTextCtrl *topicTxtCtrl;
+
+  wxStaticText *messageListLbl;
 
   wxDataViewListCtrl *messageListCtrl;
 

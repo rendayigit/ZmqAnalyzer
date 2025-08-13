@@ -15,13 +15,17 @@ private:
   wxBoxSizer *topSzr;
   wxBoxSizer *messageSzr;
   wxBoxSizer *requestSzr;
+  wxBoxSizer *responseSzr;
   wxBoxSizer *controlsSzr;
 
   wxStaticText *addressLbl;
   wxTextCtrl *addressTxtCtrl;
 
+  wxStaticText *requestLbl;
   wxTextCtrl *requestTxtCtrl;
   wxListCtrl *recentRequestsListCtrl;
+
+  wxStaticText *responseLbl;
   wxTextCtrl *responseTxtCtrl;
 
   wxButton *requestBtn;

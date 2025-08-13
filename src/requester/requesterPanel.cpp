@@ -12,6 +12,7 @@ const std::string CONFIG_RECENT_REQUESTS_KEY = "requester_recent_messages";
 
 constexpr int ADDRESS_WIDTH = 200;
 constexpr int REQUEST_TEXT_AREA_WIDTH = 400;
+constexpr int REQUEST_LIST_COL_WIDTH = REQUEST_TEXT_AREA_WIDTH + 70;
 
 RequesterPanel::RequesterPanel(wxWindow *parent)
     : wxPanel(parent, wxID_ANY),
@@ -19,6 +20,7 @@ RequesterPanel::RequesterPanel(wxWindow *parent)
       topSzr(new wxBoxSizer(wxHORIZONTAL)),
       messageSzr(new wxBoxSizer(wxHORIZONTAL)),
       requestSzr(new wxBoxSizer(wxVERTICAL)),
+      responseSzr(new wxBoxSizer(wxVERTICAL)),
       controlsSzr(new wxBoxSizer(wxHORIZONTAL)) {
 
   addressLbl = new wxStaticText(this, wxID_ANY, "Request from address:");
@@ -28,20 +30,33 @@ RequesterPanel::RequesterPanel(wxWindow *parent)
   topSzr->Add(addressLbl, 0, WX_CENTER, wxSizerFlags::GetDefaultBorder());
   topSzr->Add(addressTxtCtrl, 0, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
 
+  requestLbl = new wxStaticText(this, wxID_ANY, "Request:");
+  requestSzr->Add(requestLbl, 0, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
+
   requestTxtCtrl = new wxTextCtrl(this, wxID_ANY, "Enter your message here", wxDefaultPosition,
                                   wxSize(REQUEST_TEXT_AREA_WIDTH, -1), wxTE_MULTILINE);
   requestSzr->Add(requestTxtCtrl, 1, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
 
-  recentRequestsListCtrl = new wxListCtrl(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT);
-  recentRequestsListCtrl->InsertColumn(0, "Recent Requests", wxLIST_FORMAT_LEFT, REQUEST_TEXT_AREA_WIDTH);
+  auto *recentRequestsPanel = new wxPanel(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_SUNKEN);
+  auto *recentRequestsPanelSzr = new wxBoxSizer(wxVERTICAL);
 
-  requestSzr->Add(recentRequestsListCtrl, 1, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
+  recentRequestsListCtrl = new wxListCtrl(recentRequestsPanel, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT);
+  recentRequestsListCtrl->InsertColumn(0, "Recent Requests", wxLIST_FORMAT_LEFT, REQUEST_LIST_COL_WIDTH);
+
+  recentRequestsPanelSzr->Add(recentRequestsListCtrl, 1, WX_EXPAND, 0);
+  recentRequestsPanel->SetSizer(recentRequestsPanelSzr);
+
+  requestSzr->Add(recentRequestsPanel, 1, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
+
+  responseLbl = new wxStaticText(this, wxID_ANY, "Response:");
+  responseSzr->Add(responseLbl, 0, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
 
   responseTxtCtrl = new wxTextCtrl(this, wxID_ANY, "Response will be displayed here", wxDefaultPosition, wxDefaultSize,
                                    WX_MULTILINE_READONLY);
+  responseSzr->Add(responseTxtCtrl, 1, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
 
   messageSzr->Add(requestSzr, 1, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
-  messageSzr->Add(responseTxtCtrl, 1, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
+  messageSzr->Add(responseSzr, 1, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
 
   requestBtn = new wxButton(this, wxID_ANY, "Send request");
 

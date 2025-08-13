@@ -17,7 +17,6 @@ SubscriberPanel::SubscriberPanel(wxWindow *parent)
     : wxPanel(parent, wxID_ANY),
       mainSzr(new wxBoxSizer(wxVERTICAL)),
       topSzr(new wxBoxSizer(wxHORIZONTAL)),
-      messageSzr(new wxBoxSizer(wxHORIZONTAL)),
       controlsSzr(new wxBoxSizer(wxHORIZONTAL)) {
 
   addressLbl = new wxStaticText(this, wxID_ANY, "Subscribe to address:");
@@ -32,10 +31,15 @@ SubscriberPanel::SubscriberPanel(wxWindow *parent)
   topSzr->Add(topicLbl, 0, WX_CENTER, wxSizerFlags::GetDefaultBorder());
   topSzr->Add(topicTxtCtrl, 1, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
 
+  mainSzr->Add(topSzr, 0, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
+  
+  messageListLbl = new wxStaticText(this, wxID_ANY, "Received messages:");
+  mainSzr->Add(messageListLbl, 0, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
+
   messageListCtrl = new wxDataViewListCtrl(this, wxID_ANY); // NOLINT(cppcoreguidelines-prefer-member-initializer)
   messageListCtrl->AppendColumn(new wxDataViewColumn("Topic", new wxDataViewTextRenderer(), 0));
   messageListCtrl->AppendColumn(new wxDataViewColumn("Message", new wxDataViewTextRenderer(), 1));
-  messageSzr->Add(messageListCtrl, 1, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
+  mainSzr->Add(messageListCtrl, 1, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
 
   startSubBtn = new wxButton(this, wxID_ANY, "Start");
   stopSubBtn = new wxButton(this, wxID_ANY, "Stop");
@@ -44,8 +48,6 @@ SubscriberPanel::SubscriberPanel(wxWindow *parent)
   controlsSzr->Add(startSubBtn, 0, WX_ALIGN_CENTER_VERTICAL, wxSizerFlags::GetDefaultBorder());
   controlsSzr->Add(stopSubBtn, 0, WX_ALIGN_CENTER_VERTICAL, wxSizerFlags::GetDefaultBorder());
 
-  mainSzr->Add(topSzr, 0, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
-  mainSzr->Add(messageSzr, 1, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
   mainSzr->Add(controlsSzr, 0, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
 
   SetSizer(mainSzr);
