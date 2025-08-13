@@ -73,6 +73,12 @@ void Subscriber::start(const std::vector<std::string> &topics, const std::string
     stop();
   }
 
+  // Clean up existing socket before creating a new one
+  if (m_socket != nullptr) {
+    delete m_socket;
+    m_socket = nullptr;
+  }
+
   m_socket = new zmq::socket_t(*m_context, zmq::socket_type::sub);
   m_socket->set(zmq::sockopt::rcvtimeo, SOCKET_TIMEOUT);
   m_socket->connect(m_connectionAddress);
@@ -86,6 +92,11 @@ void Subscriber::start(const std::vector<std::string> &topics, const std::string
   }
 
   m_isRunning = true;
+
+  // Ensure any existing step timer thread is stopped
+  if (m_stepTimerThread.joinable()) {
+    m_stepTimerThread.join();
+  }
 
   m_stepTimerThread = std::thread([this]() {
     m_stepTimer.expires_from_now(boost::posix_time::milliseconds(0));
@@ -107,11 +118,13 @@ void Subscriber::stop() {
   }
 
   // Unsubscribe from all topics
-  for (const auto &entry : m_latestMessages) {
-    m_socket->set(zmq::sockopt::unsubscribe, entry.first.ToStdString());
-  }
+  if (m_socket != nullptr) {
+    for (const auto &entry : m_latestMessages) {
+      m_socket->set(zmq::sockopt::unsubscribe, entry.first.ToStdString());
+    }
 
-  m_socket->close();
+    m_socket->close();
+  }
 }
 
 wxString Subscriber::getLatestMessage(const wxString &topic) {
@@ -130,20 +143,39 @@ void Subscriber::step(boost::system::error_code const &errorCode) {
     return;
   }
 
-  // Receive all parts of the message
-  std::vector<zmq::message_t> recvMsgs;
-  zmq::recv_result_t result = zmq::recv_multipart(*m_socket, std::back_inserter(recvMsgs));
+  // Check if socket is valid before polling
+  if (m_socket == nullptr) {
+    return;
+  }
 
-  if (result and *result == 2) {
-    std::string topic = recvMsgs.at(0).to_string();
-    std::string message = recvMsgs.at(1).to_string();
+  // Poll the socket before receiving to avoid assertion failure
+  std::array<zmq::pollitem_t, 1> items{{{static_cast<void *>(*m_socket), 0, ZMQ_POLLIN, 0}}};
 
-    nlohmann::json messageJson;
-    messageJson["topic"] = topic;
-    messageJson["message"] = message;
-    m_onMessageReceivedCallback(messageJson);
+  try {
+    zmq::poll(items.data(), items.size(), std::chrono::milliseconds(0)); // Non-blocking poll
 
-    m_latestMessages[topic] = message;
+    // Only try to receive if data is available
+    if ((static_cast<unsigned>(items[0].revents) & static_cast<unsigned>(ZMQ_POLLIN)) != 0) {
+      // Receive all parts of the message
+      std::vector<zmq::message_t> recvMsgs;
+      zmq::recv_result_t result
+          = zmq::recv_multipart(*m_socket, std::back_inserter(recvMsgs), zmq::recv_flags::dontwait);
+
+      if (result and *result == 2) {
+        std::string topic = recvMsgs.at(0).to_string();
+        std::string message = recvMsgs.at(1).to_string();
+
+        nlohmann::json messageJson;
+        messageJson["topic"] = topic;
+        messageJson["message"] = message;
+        m_onMessageReceivedCallback(messageJson);
+
+        m_latestMessages[topic] = message;
+      }
+    }
+  } catch (const zmq::error_t &e) {
+    // Log ZMQ errors but don't crash
+    Logger::warn("ZMQ error in step: " + std::string(e.what()));
   }
 
   // Reschedule the timer for the next step
