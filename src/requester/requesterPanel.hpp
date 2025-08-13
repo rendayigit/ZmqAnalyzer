@@ -11,9 +11,6 @@ private:
   void onSendRequest(wxCommandEvent &event);
   void onRequestResponseSelected(wxListEvent &event);
 
-  void populateRecentRequestsFromConfig();
-  static void addRecentRequestToConfig(const std::string &request);
-
   wxBoxSizer *mainSzr;
   wxBoxSizer *topSzr;
   wxBoxSizer *messageSzr;

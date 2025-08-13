@@ -22,11 +22,10 @@ Subscriber::Subscriber()
       m_subscriberWorkerThread([&] { m_subscriberService.run(); }),
       m_stepTimer(m_subscriberService) {
   nlohmann::json config;
-  std::string configPath = getExecutableDirectory() + "/config.json";
-  std::ifstream configFile(configPath);
+  std::ifstream configFile(CONFIG_FILE_PATH);
 
   if (not configFile.is_open()) {
-    throw std::runtime_error("Failed to open config file: " + configPath);
+    throw std::runtime_error("Failed to open config file: " + CONFIG_FILE_PATH);
   }
 
   try {
@@ -74,7 +73,7 @@ void Subscriber::start(const std::vector<std::string> &topics, const std::string
 
     m_connectionAddress = connectionAddress;
 
-    updateAddressInConfig(m_connectionAddress);
+    updateKeyInConfig(CONFIG_ADDRESS_KEY, m_connectionAddress);
   } else if (m_isRunning) {
     stop();
   }
@@ -198,37 +197,5 @@ void Subscriber::step(boost::system::error_code const &errorCode) {
     if (errorCode != boost::asio::error::operation_aborted) {
       Logger::warn("Subscriber step error");
     }
-  }
-}
-
-// TODO: Code repetition in this function
-void Subscriber::updateAddressInConfig(const std::string &newAddress) {
-  nlohmann::json config;
-  std::string configPath = getExecutableDirectory() + "/config.json";
-  std::ifstream configFile(configPath);
-
-  if (configFile.is_open()) {
-    try {
-      // Read the existing config
-      configFile >> config;
-      configFile.close();
-
-      // Update the subscriber address
-      config[CONFIG_ADDRESS_KEY] = newAddress;
-
-      // Write the updated config back to the file
-      std::ofstream outConfigFile(configPath, std::ios::trunc);
-
-      if (outConfigFile.is_open()) {
-        outConfigFile << config.dump(2);
-        outConfigFile.close();
-      } else {
-        Logger::warn("Could not open config file for writing: " + configPath);
-      }
-    } catch (const std::exception &e) {
-      Logger::warn("Error writing to config file: " + std::string(e.what()));
-    }
-  } else {
-    Logger::warn("Could not open config file for reading: " + configPath);
   }
 }
