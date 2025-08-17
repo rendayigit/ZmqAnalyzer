@@ -1,49 +1,10 @@
-#pragma once
+#include "config.hpp"
 
 #include "logger.hpp"
 
-#include <climits>
-#include <filesystem>
 #include <fstream>
-#include <linux/limits.h>
-#include <nlohmann/json.hpp>
-#include <string>
-#include <unistd.h>
-#include <vector>
 
-static std::string getExecutableDirectory() {
-  char execPathStr[PATH_MAX]; // NOLINT(hicpp-avoid-c-arrays, modernize-avoid-c-arrays,
-                              // cppcoreguidelines-avoid-c-arrays)
-
-  // Get the path of the executable
-  ssize_t len = readlink("/proc/self/exe", execPathStr, PATH_MAX - 1);
-  if (len != -1) {
-    execPathStr[len] = '\0'; // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
-  }
-
-  // Get the path of the executable's parent directory
-  std::filesystem::path execPath(execPathStr);
-  std::filesystem::path parentPath = execPath.parent_path();
-
-  // Navigate to the project's bin directory
-  std::string pathStr = parentPath.string();
-
-  // Find the last directory in the path (e.g., "/bin" etc.)
-  std::string dirName = parentPath.filename().string();
-  size_t dirPos = pathStr.rfind("/" + dirName);
-
-  if (dirPos != std::string::npos) {
-    // Keep everything up to and including the directory name
-    pathStr = pathStr.substr(0, dirPos + 1 + dirName.length());
-  }
-
-  return (pathStr + '/');
-}
-
-const std::string CONFIG_FILE_PATH = getExecutableDirectory() + "config.json";
-constexpr int MAX_LIST_SIZE = 25;
-
-static void updateKeyInConfig(const std::string &key, const std::string &value) {
+void Config::updateKeyInConfig(const std::string &key, const std::string &value) {
   nlohmann::json config;
   std::ifstream configFile(CONFIG_FILE_PATH);
 
@@ -73,7 +34,7 @@ static void updateKeyInConfig(const std::string &key, const std::string &value) 
   }
 }
 
-static void addValueToListInConfig(const std::string &key, const std::string &value) {
+void Config::addValueToListInConfig(const std::string &key, const std::string &value) {
   nlohmann::json config;
   std::ifstream configFile(CONFIG_FILE_PATH);
 
@@ -108,7 +69,7 @@ static void addValueToListInConfig(const std::string &key, const std::string &va
   }
 }
 
-static void removeValueFromListInConfig(const std::string &key, const std::string &value) {
+void Config::removeValueFromListInConfig(const std::string &key, const std::string &value) {
   nlohmann::json config;
   std::ifstream configFile(CONFIG_FILE_PATH);
 
@@ -139,7 +100,7 @@ static void removeValueFromListInConfig(const std::string &key, const std::strin
   }
 }
 
-static std::vector<std::string> getListItemsFromConfig(const std::string &key) {
+std::vector<std::string> Config::getListItemsFromConfig(const std::string &key) {
   nlohmann::json config;
   std::ifstream configFile(CONFIG_FILE_PATH);
   std::vector<std::string> items;

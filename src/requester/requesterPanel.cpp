@@ -1,12 +1,10 @@
 #include "requesterPanel.hpp"
 
-#include "common.hpp"
-#include "logger.hpp"
+#include "config.hpp"
 #include "requester.hpp"
 #include "wx/listbase.h"
 #include "wxConstants.hpp"
 
-#include <fstream>
 #include <nlohmann/json.hpp>
 #include <wx/clipbrd.h>
 
@@ -75,7 +73,7 @@ RequesterPanel::RequesterPanel(wxWindow *parent)
   recentRequestsListCtrl->Bind(wxEVT_LIST_ITEM_ACTIVATED, &RequesterPanel::onRequestResponseSelected, this);
   recentRequestsListCtrl->Bind(wxEVT_LIST_ITEM_RIGHT_CLICK, &RequesterPanel::onRequestResponseRightClick, this);
 
-  for (const auto &request : getListItemsFromConfig(CONFIG_RECENT_REQUESTS_KEY)) {
+  for (const auto &request : Config::getListItemsFromConfig(CONFIG_RECENT_REQUESTS_KEY)) {
     recentRequestsListCtrl->InsertItem(0, request);
   }
 }
@@ -101,7 +99,7 @@ void RequesterPanel::onSendRequest(wxCommandEvent &event) { // NOLINT(readabilit
 
   if (not isItemFound) {
     recentRequestsListCtrl->InsertItem(0, request);
-    addValueToListInConfig(CONFIG_RECENT_REQUESTS_KEY, request);
+    Config::addValueToListInConfig(CONFIG_RECENT_REQUESTS_KEY, request);
   }
 
   event.Skip();
@@ -165,7 +163,7 @@ void RequesterPanel::onDeleteContextMenu(wxCommandEvent &event) {
 
   if (itemIndex != -1) {
     std::string requestToDelete = recentRequestsListCtrl->GetItemText(itemIndex).ToStdString();
-    removeValueFromListInConfig(CONFIG_RECENT_REQUESTS_KEY, requestToDelete);
+    Config::removeValueFromListInConfig(CONFIG_RECENT_REQUESTS_KEY, requestToDelete);
     recentRequestsListCtrl->DeleteItem(itemIndex);
   }
 

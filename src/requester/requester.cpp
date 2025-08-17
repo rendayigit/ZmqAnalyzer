@@ -1,6 +1,6 @@
 #include "requester.hpp"
 
-#include "common.hpp"
+#include "config.hpp"
 
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -46,7 +46,7 @@ std::string Requester::request(const std::string &message, const std::string &co
   if (not connectionAddress.empty() and connectionAddress != m_connectionAddress) {
     m_connectionAddress = connectionAddress;
 
-    updateKeyInConfig(CONFIG_ADDRESS_KEY, m_connectionAddress);
+    Config::updateKeyInConfig(CONFIG_ADDRESS_KEY, m_connectionAddress);
 
     resetSocket();
   }

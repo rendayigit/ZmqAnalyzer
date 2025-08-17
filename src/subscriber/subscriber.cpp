@@ -1,6 +1,6 @@
 #include "subscriber.hpp"
 
-#include "common.hpp"
+#include "config.hpp"
 #include "logger.hpp"
 
 #include <chrono>
@@ -73,7 +73,7 @@ void Subscriber::start(const std::vector<std::string> &topics, const std::string
 
     m_connectionAddress = connectionAddress;
 
-    updateKeyInConfig(CONFIG_ADDRESS_KEY, m_connectionAddress);
+    Config::updateKeyInConfig(CONFIG_ADDRESS_KEY, m_connectionAddress);
   } else if (m_isRunning) {
     stop();
   }
