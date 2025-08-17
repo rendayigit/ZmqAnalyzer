@@ -108,6 +108,37 @@ static void addValueToListInConfig(const std::string &key, const std::string &va
   }
 }
 
+static void removeValueFromListInConfig(const std::string &key, const std::string &value) {
+  nlohmann::json config;
+  std::ifstream configFile(CONFIG_FILE_PATH);
+
+  if (configFile.is_open()) {
+    try {
+      // Read the existing config
+      configFile >> config;
+      configFile.close();
+
+      // Remove the value from list
+      auto &list = config[key];
+      list.erase(std::remove(list.begin(), list.end(), value), list.end());
+
+      // Write the updated config back to the file
+      std::ofstream outConfigFile(CONFIG_FILE_PATH, std::ios::trunc);
+
+      if (outConfigFile.is_open()) {
+        outConfigFile << config.dump(2);
+        outConfigFile.close();
+      } else {
+        Logger::warn("Could not open config file for writing: " + CONFIG_FILE_PATH);
+      }
+    } catch (const std::exception &e) {
+      Logger::warn("Error writing to config file: " + std::string(e.what()));
+    }
+  } else {
+    Logger::warn("Could not open config file for reading: " + CONFIG_FILE_PATH);
+  }
+}
+
 static std::vector<std::string> getListItemsFromConfig(const std::string &key) {
   nlohmann::json config;
   std::ifstream configFile(CONFIG_FILE_PATH);

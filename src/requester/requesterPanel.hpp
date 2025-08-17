@@ -10,6 +10,11 @@ public:
 private:
   void onSendRequest(wxCommandEvent &event);
   void onRequestResponseSelected(wxListEvent &event);
+  void onRequestResponseRightClick(wxListEvent &event);
+
+  void onUseContextMenu(wxCommandEvent &event);
+  void onCopyContextMenu(wxCommandEvent &event);
+  void onDeleteContextMenu(wxCommandEvent &event);
 
   wxBoxSizer *mainSzr;
   wxBoxSizer *topSzr;

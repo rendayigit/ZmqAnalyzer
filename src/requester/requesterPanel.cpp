@@ -3,10 +3,12 @@
 #include "common.hpp"
 #include "logger.hpp"
 #include "requester.hpp"
+#include "wx/listbase.h"
 #include "wxConstants.hpp"
 
 #include <fstream>
 #include <nlohmann/json.hpp>
+#include <wx/clipbrd.h>
 
 const std::string CONFIG_RECENT_REQUESTS_KEY = "requester_recent_messages";
 
@@ -71,6 +73,7 @@ RequesterPanel::RequesterPanel(wxWindow *parent)
 
   requestBtn->Bind(wxEVT_BUTTON, &RequesterPanel::onSendRequest, this);
   recentRequestsListCtrl->Bind(wxEVT_LIST_ITEM_ACTIVATED, &RequesterPanel::onRequestResponseSelected, this);
+  recentRequestsListCtrl->Bind(wxEVT_LIST_ITEM_RIGHT_CLICK, &RequesterPanel::onRequestResponseRightClick, this);
 
   for (const auto &request : getListItemsFromConfig(CONFIG_RECENT_REQUESTS_KEY)) {
     recentRequestsListCtrl->InsertItem(0, request);
@@ -110,6 +113,60 @@ void RequesterPanel::onRequestResponseSelected(wxListEvent &event) {
   if (itemIndex != -1) {
     wxString selectedRequestMessage = recentRequestsListCtrl->GetItemText(itemIndex);
     requestTxtCtrl->SetValue(selectedRequestMessage);
+  }
+
+  event.Skip();
+}
+
+void RequesterPanel::onRequestResponseRightClick(wxListEvent &event) {
+  wxMenu contextMenu;
+  auto *useRequestItem = contextMenu.Append(wxID_ANY, "Use Request");
+  auto *copyRequestItem = contextMenu.Append(wxID_COPY, "Copy Request");
+  auto *deleteRequestItem = contextMenu.Append(wxID_DELETE, "Delete Request");
+
+  Bind(wxEVT_MENU, &RequesterPanel::onUseContextMenu, this, useRequestItem->GetId());
+  Bind(wxEVT_MENU, &RequesterPanel::onCopyContextMenu, this, copyRequestItem->GetId());
+  Bind(wxEVT_MENU, &RequesterPanel::onDeleteContextMenu, this, deleteRequestItem->GetId());
+
+  PopupMenu(&contextMenu);
+
+  event.Skip();
+}
+
+void RequesterPanel::onUseContextMenu(wxCommandEvent &event) {
+  long itemIndex = recentRequestsListCtrl->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
+
+  if (itemIndex != -1) {
+    wxString selectedRequest = recentRequestsListCtrl->GetItemText(itemIndex);
+    requestTxtCtrl->SetValue(selectedRequest);
+  }
+
+  event.Skip();
+}
+
+void RequesterPanel::onCopyContextMenu(wxCommandEvent &event) {
+  long itemIndex = recentRequestsListCtrl->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
+
+  if (itemIndex != -1) {
+    wxString selectedRequest = recentRequestsListCtrl->GetItemText(itemIndex);
+    wxClipboard *clipboard = wxClipboard::Get();
+
+    if (clipboard->Open()) {
+      clipboard->SetData(new wxTextDataObject(selectedRequest));
+      clipboard->Close();
+    }
+  }
+
+  event.Skip();
+}
+
+void RequesterPanel::onDeleteContextMenu(wxCommandEvent &event) {
+  long itemIndex = recentRequestsListCtrl->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
+
+  if (itemIndex != -1) {
+    std::string requestToDelete = recentRequestsListCtrl->GetItemText(itemIndex).ToStdString();
+    removeValueFromListInConfig(CONFIG_RECENT_REQUESTS_KEY, requestToDelete);
+    recentRequestsListCtrl->DeleteItem(itemIndex);
   }
 
   event.Skip();
