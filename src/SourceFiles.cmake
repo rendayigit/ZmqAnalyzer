@@ -4,6 +4,7 @@ set(SOURCEFILES
     ${CMAKE_CURRENT_LIST_DIR}/mainFrame.cpp
     ${CMAKE_CURRENT_LIST_DIR}/logger/logger.cpp
     ${CMAKE_CURRENT_LIST_DIR}/config/config.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/baseComPanel/baseComPanel.cpp
     ${CMAKE_CURRENT_LIST_DIR}/subscriber/subscriberPanel.cpp
     ${CMAKE_CURRENT_LIST_DIR}/subscriber/subscriber.cpp
     ${CMAKE_CURRENT_LIST_DIR}/subscriber/topicFrame.cpp
