@@ -5,7 +5,9 @@
     "{\"command\":\"sim/model-tree\"}",
     "{\"command\":\"sim/run\"}",
     "{\"command\":\"sim/hold\"}",
-    "{\"command\":\"sim/speed\", \"payload\": {\"speed\":1.0}}"
+    "{\"command\":\"sim/speed\", \"payload\": {\"speed\":1.0}}",
+    "{\"command\":\"sim/step\"}",
+    "{\"command\":\"sim/progress\", \"payload\": {\"millis\":5000}}"
   ],
   "subscriber_address": "tcp://0.0.0.0:4002"
 }
