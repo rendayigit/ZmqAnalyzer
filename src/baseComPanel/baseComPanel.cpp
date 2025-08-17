@@ -52,7 +52,7 @@ BaseComPanel::BaseComPanel(wxWindow *parent, const wxString &connectionAddress,
   recvMsgLbl = new wxStaticText(this, wxID_ANY, "Received:");
   recvMsgSzr->Add(recvMsgLbl, 0, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
 
-  recvMsgTxtCtrl = new wxTextCtrl(this, wxID_ANY, "Received message will be displayed here", wxDefaultPosition,
+  recvMsgTxtCtrl = new wxTextCtrl(this, wxID_ANY, "\n\n\n\n\n\n\n\n\t\t\tReceived message will be displayed here", wxDefaultPosition,
                                   wxDefaultSize, WX_MULTILINE_READONLY);
   recvMsgSzr->Add(recvMsgTxtCtrl, 1, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
 
