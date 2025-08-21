@@ -2,12 +2,15 @@
   "requester_address": "tcp://0.0.0.0:4001",
   "requester_recent_messages": [
     "{\"command\":\"sim/state\"}",
-    "{\"command\":\"sim/model-tree\"}",
     "{\"command\":\"sim/run\"}",
     "{\"command\":\"sim/hold\"}",
-    "{\"command\":\"sim/speed\", \"payload\": {\"speed\":1.0}}",
     "{\"command\":\"sim/step\"}",
-    "{\"command\":\"sim/progress\", \"payload\": {\"millis\":5000}}"
+    "{\"command\":\"sim/progress\", \"payload\": {\"millis\":5000}}",
+    "{\"command\":\"sim/speed\", \"payload\": {\"speed\":1.0}}",
+    "{\"command\":\"sim/model-tree\"}",
+    "{\"command\":\"failure/tree\"}",
+    "{\"command\":\"failure/execute\", \"payload\": [ {\"failureUuid\": \"f1450744-c66f-4df7-87f1-bdd7eef35cd4\", \"isActive\":true, \"time\":5000} ]}",
+    "{\"command\":\"fallible/list\"}"
   ],
   "subscriber_address": "tcp://0.0.0.0:4002"
 }
