@@ -2,10 +2,10 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "app",
+      "name": "Zmq_Analyzer",
       "type": "cppdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/bin/app",
+      "program": "${workspaceFolder}/bin/Zmq_Analyzer",
       "args": [],
       "cwd": "${workspaceFolder}/bin/",
       "setupCommands": [
