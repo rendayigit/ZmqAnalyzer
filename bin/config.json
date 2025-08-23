@@ -10,7 +10,8 @@
     "{\"command\":\"sim/model-tree\"}",
     "{\"command\":\"failure/tree\"}",
     "{\"command\":\"failure/execute\", \"payload\": [ {\"failureUuid\": \"f1450744-c66f-4df7-87f1-bdd7eef35cd4\", \"isActive\":true, \"time\":5000} ]}",
-    "{\"command\":\"fallible/list\"}"
+    "{\"command\":\"fallible/list\"}",
+    "{\"command\":\"sim/profiler\", \"payload\": {\"isEnabled\":true}}"
   ],
   "subscriber_address": "tcp://0.0.0.0:4002"
 }
