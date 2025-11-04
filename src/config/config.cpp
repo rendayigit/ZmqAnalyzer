@@ -26,7 +26,7 @@ void Config::createConfigFileIfNotExists() {
     configFile << defaultConfig.dump(2);
     configFile.close();
   } else {
-    std::cerr << "Could not create config file at: " << CONFIG_FILE_PATH;
+    std::cerr << "Could not create config file at: " << CONFIG_FILE_PATH << std::endl;
   }
 }
 
