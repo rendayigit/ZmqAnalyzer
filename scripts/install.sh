@@ -70,7 +70,7 @@ install_binary() {
     fi
     
     # Set appropriate permissions
-    chmod 755 "$BIN_DIR/galac-tv"
+    chmod 755 "$BIN_DIR/zmqanalyzer"
     
     print_success "Binary installed successfully"
 }
