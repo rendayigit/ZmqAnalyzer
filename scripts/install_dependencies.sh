@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # wxWidgets Installation Script for Ubuntu/Debian
-# This script installs all dependencies needed for the ZmqAnalyzer C++ application
+# This script installs all dependencies needed for ZmqAnalyzer
 # 
 # Supported systems:
 # - Ubuntu 22.04 and earlier: Uses wxWidgets 3.0.x packages
@@ -10,71 +10,105 @@
 
 set -e  # Exit on any error
 
-echo "=== ZmqAnalyzer Dependency Installation ==="
-echo
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
 
-# Check if running on Ubuntu/Debian
-if ! command -v apt &> /dev/null; then
-    echo "Error: This script is designed for Ubuntu/Debian systems with apt package manager."
-    echo "Please refer to the README.md for installation instructions for your system."
-    exit 1
-fi
+# Functions to print colored output
+print_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
 
-# Update package lists
-echo "Updating package lists..."
-sudo apt update
+print_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
 
-echo "Installing core build tools..."
-sudo apt install -y \
-    build-essential \
-    cmake \
-    gdb \
-    clangd \
-    clang-format
+print_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
 
-echo "Installing additional project dependencies..."
-sudo apt install -y \
-    libboost-all-dev \
-    libzmq3-dev \
-    libfmt-dev \
-    libspdlog-dev
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
 
-echo "Installing wxWidgets development libraries..."
+# Function to check if running on Ubuntu/Debian
+check_system() {
+    if ! command -v apt &> /dev/null; then
+        print_error "This script is designed for Ubuntu/Debian systems with apt package manager."
+        print_info "Please refer to the README.md for installation instructions for your system."
+        exit 1
+    fi
+}
 
-# Detect Ubuntu version and install appropriate wxWidgets packages
-# Ubuntu 24.04+ uses wxWidgets 3.2.x, while older versions use 3.0.x
-UBUNTU_VERSION=$(lsb_release -rs 2>/dev/null || echo "unknown")
-echo "Detected Ubuntu/distribution version: $UBUNTU_VERSION"
+# Function to check if running as root for system installation
+check_permissions() {
+    if [[ $EUID -ne 0 ]]; then
+        print_error "Installation requires root privileges."
+        print_info "Run with sudo: sudo ./install_dependencies.sh"
+        exit 1
+    fi
+}
 
-# Check if wxWidgets 3.2 packages are available (Ubuntu 24.04+)
-if apt-cache search libwxgtk3.2-dev | grep -q libwxgtk3.2-dev; then
-    echo "Installing wxWidgets 3.2 packages (newer systems)..."
+# Function to install dependencies
+install_dependencies() {
+    # Check if running on Ubuntu/Debian
+    if ! command -v apt &> /dev/null; then
+        print_error "Error: This script is designed for Ubuntu/Debian systems with apt package manager."
+        exit 1
+    fi
+
+    # Update package lists
+    print_info "Updating package lists..."
+    sudo apt update
+
+    print_info "Installing core dependencies..."
     sudo apt install -y \
-        libwxgtk3.2-dev \
-        wx3.2-headers \
-        wx-common
-elif apt-cache search libwxgtk3.0-gtk3-dev | grep -q libwxgtk3.0-gtk3-dev; then
-    echo "Installing wxWidgets 3.0 packages (older systems)..."
-    sudo apt install -y \
-        libwxgtk3.0-gtk3-dev \
-        wx3.0-headers \
-        wx-common
-else
-    echo "Error: No compatible wxWidgets development packages found."
-    echo "Please install wxWidgets manually or check your package repositories."
-    exit 1
-fi
+        build-essential \
+        cmake \
+        libboost-all-dev \
+        libzmq3-dev \
+        nlohmann-json3-dev \
+        libfmt-dev \
+        libspdlog-dev
 
-echo
-echo "=== Installation Complete ==="
-echo
-echo "All ZmqAnalyzer dependencies installed successfully!"
-echo "You can now build and run the project using:"
-echo "  ./scripts/build.sh"
-echo "  ./scripts/run.sh"
-echo
-echo "Or using CMake directly:"
-echo "  mkdir -p build && cd build"
-echo "  cmake .."
-echo "  make -j\$(nproc)"
-echo "  ../bin/Zmq_Analyzer"
+    print_info "Installing wxWidgets development libraries..."
+
+    # Detect Ubuntu version and install appropriate wxWidgets packages
+    # Ubuntu 24.04+ uses wxWidgets 3.2.x, while older versions use 3.0.x
+    UBUNTU_VERSION=$(lsb_release -rs 2>/dev/null || echo "unknown")
+    print_info "Detected Ubuntu/distribution version: $UBUNTU_VERSION"
+
+    # Check if wxWidgets 3.2 packages are available (Ubuntu 24.04+)
+    if apt-cache search libwxgtk3.2-dev | grep -q libwxgtk3.2-dev; then
+        print_info "Installing wxWidgets 3.2 packages (newer systems)..."
+        sudo apt install -y \
+            libwxgtk3.2-dev \
+            wx3.2-headers \
+            wx-common
+    elif apt-cache search libwxgtk3.0-gtk3-dev | grep -q libwxgtk3.0-gtk3-dev; then
+        print_info "Installing wxWidgets 3.0 packages (older systems)..."
+        sudo apt install -y \
+            libwxgtk3.0-gtk3-dev \
+            wx3.0-headers \
+            wx-common
+    else
+        print_error "No compatible wxWidgets development packages found."
+        print_info "Please install wxWidgets manually or check your package repositories."
+        exit 1
+    fi
+}
+
+# Main installation process
+main() {
+    print_info "ZmqAnalyzer Dependency Installation"
+    check_system
+    check_permissions
+    install_dependencies
+    print_success "All ZmqAnalyzer dependencies installed successfully!"
+}
+
+# Run main function
+main "$@"

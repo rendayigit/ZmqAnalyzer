@@ -1,3 +1,4 @@
+#include "config/config.hpp"
 #include "mainFrame.hpp"
 
 #include <wx/wx.h>
@@ -9,6 +10,9 @@ public:
 };
 
 bool MyApp::OnInit() {
+  // Create config file if it doesn't exist
+  Config::createConfigFileIfNotExists();
+
   auto *frame = new MainFrame();
   frame->Show(true);
   return true;

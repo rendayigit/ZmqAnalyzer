@@ -43,6 +43,34 @@
                 "cwd": "${workspaceFolder}/"
             },
             "runOptions": {"reevaluateOnRerun": false},
+        },
+        {
+        "label": "Install App",
+        "type": "shell",
+        "group": {
+            "kind": "build",
+            "isDefault": true
+        },
+        "command": ["chmod -R 777 ./scripts/;", "sudo ./scripts/install.sh"],
+        "options": {
+            "cwd": "${workspaceFolder}/"
+        },
+        "problemMatcher": "$gcc",
+        "runOptions": { "reevaluateOnRerun": false }
+        },
+        {
+        "label": "Uninstall App",
+        "type": "shell",
+        "group": {
+            "kind": "build",
+            "isDefault": true
+        },
+        "command": ["chmod -R 777 ./scripts/;", "sudo ./scripts/uninstall.sh"],
+        "options": {
+            "cwd": "${workspaceFolder}/"
+        },
+        "problemMatcher": "$gcc",
+        "runOptions": { "reevaluateOnRerun": false }
         }
     ]
 }
