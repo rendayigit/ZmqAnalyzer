@@ -48,7 +48,6 @@ remove_binary() {
             print_success "Binary removed successfully"
         else
             print_error "Failed to remove binary"
-            exit 1
         fi
     else
         print_warning "Binary not found: $ZMQ_ANALYZER_BINARY"
@@ -57,9 +56,21 @@ remove_binary() {
 
 # Function to remove desktop shortcut
 remove_desktop_shortcut() {
+    DESKTOP_SHORTCUT="/home/$SUDO_USER/Desktop/zmqanalyzer.desktop"
     DESKTOP_FILE="/home/$SUDO_USER/.local/share/applications/zmqanalyzer.desktop"
     ICON_FILE="/home/$SUDO_USER/.local/share/icons/zmqanalyzer.png"
-    DESKTOP_SHORTCUT="/home/$SUDO_USER/Desktop/zmqanalyzer.desktop"
+
+    # Remove desktop shortcut from Desktop if it exists
+    if [[ -f "$DESKTOP_SHORTCUT" ]]; then
+        print_info "Removing desktop shortcut from Desktop: $DESKTOP_SHORTCUT"
+        if rm "$DESKTOP_SHORTCUT"; then
+            print_success "Desktop shortcut on Desktop removed successfully"
+        else
+            print_error "Failed to remove desktop shortcut from Desktop"
+        fi
+    else
+        print_warning "Desktop shortcut on Desktop not found: $DESKTOP_SHORTCUT"
+    fi
 
     # Remove desktop file if it exists
     if [[ -f "$DESKTOP_FILE" ]]; then
@@ -68,7 +79,6 @@ remove_desktop_shortcut() {
             print_success "Desktop shortcut removed successfully"
         else
             print_error "Failed to remove desktop shortcut"
-            exit 1
         fi
     else
         print_warning "Desktop shortcut not found: $DESKTOP_FILE"
@@ -81,23 +91,9 @@ remove_desktop_shortcut() {
             print_success "Icon removed successfully"
         else
             print_error "Failed to remove icon"
-            exit 1
         fi
     else
         print_warning "Icon not found: $ICON_FILE"
-    fi
-
-    # Remove desktop shortcut from Desktop if it exists
-    if [[ -f "$DESKTOP_SHORTCUT" ]]; then
-        print_info "Removing desktop shortcut from Desktop: $DESKTOP_SHORTCUT"
-        if rm "$DESKTOP_SHORTCUT"; then
-            print_success "Desktop shortcut on Desktop removed successfully"
-        else
-            print_error "Failed to remove desktop shortcut from Desktop"
-            exit 1
-        fi
-    else
-        print_warning "Desktop shortcut on Desktop not found: $DESKTOP_SHORTCUT"
     fi
 }
 
