@@ -3,6 +3,6 @@ cd `dirname $0`
 SCRIPTDIR=`pwd`
 cd -
 
-# Run unit tests
+# Run application
 cd $SCRIPTDIR/../bin/
-./Zmq_Analyzer
+./zmqanalyzer

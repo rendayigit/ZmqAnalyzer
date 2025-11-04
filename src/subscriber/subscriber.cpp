@@ -4,7 +4,6 @@
 #include "logger.hpp"
 
 #include <chrono>
-#include <fstream>
 #include <string>
 #include <thread>
 #include <zmq_addon.hpp>
@@ -20,26 +19,8 @@ Subscriber::Subscriber()
       m_socket(new zmq::socket_t(*m_context, zmq::socket_type::sub)),
       m_subscriberWorker(m_subscriberService),
       m_subscriberWorkerThread([&] { m_subscriberService.run(); }),
-      m_stepTimer(m_subscriberService) {
-  nlohmann::json config;
-  std::ifstream configFile(CONFIG_FILE_PATH);
-
-  if (not configFile.is_open()) {
-    throw std::runtime_error("Failed to open config file: " + CONFIG_FILE_PATH);
-  }
-
-  try {
-    configFile >> config;
-
-    if (not config.contains(CONFIG_ADDRESS_KEY) or not config[CONFIG_ADDRESS_KEY].is_string()) {
-      throw std::runtime_error("Config file missing or invalid '" + CONFIG_ADDRESS_KEY + "'");
-    }
-
-    m_connectionAddress = config[CONFIG_ADDRESS_KEY].get<std::string>();
-  } catch (const std::exception &e) {
-    throw std::runtime_error(std::string("Error reading config file: ") + e.what());
-  }
-
+      m_stepTimer(m_subscriberService),
+      m_connectionAddress(Config::getValueFromConfig(CONFIG_ADDRESS_KEY)) {
   m_socket->set(zmq::sockopt::rcvtimeo, SOCKET_TIMEOUT);
 
   try {

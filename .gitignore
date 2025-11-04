@@ -1,4 +1,4 @@
 .cache/
-bin/Zmq_Analyzer
+bin/
 build/
 *.log

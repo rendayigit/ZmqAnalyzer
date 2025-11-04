@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(Zmq_Analyzer LANGUAGES CXX)
+project(zmqanalyzer LANGUAGES CXX)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
@@ -37,10 +37,10 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin/)
 # Include SourceFiles.cmake to access the SOURCEFILES and INCLUDEDIRS variables
 include(${CMAKE_CURRENT_LIST_DIR}/src/SourceFiles.cmake)
 
-add_executable(Zmq_Analyzer ${SOURCEFILES})
+add_executable(zmqanalyzer ${SOURCEFILES})
 
-target_include_directories(Zmq_Analyzer PUBLIC ${INCLUDEDIRS})
+target_include_directories(zmqanalyzer PUBLIC ${INCLUDEDIRS})
 
 # Apply wxWidgets flags
-target_compile_options(Zmq_Analyzer PRIVATE ${WX_CXX_FLAGS})
-target_link_libraries(Zmq_Analyzer ${WX_LIBS} Boost::filesystem Boost::program_options fmt spdlog zmq)
+target_compile_options(zmqanalyzer PRIVATE ${WX_CXX_FLAGS})
+target_link_libraries(zmqanalyzer ${WX_LIBS} Boost::filesystem Boost::program_options fmt spdlog zmq)

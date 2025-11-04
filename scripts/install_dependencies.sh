@@ -109,3 +109,6 @@ main() {
     install_dependencies
     print_success "All ZmqAnalyzer dependencies installed successfully!"
 }
+
+# Run main function
+main "$@"

@@ -75,6 +75,10 @@ BaseComPanel::BaseComPanel(wxWindow *parent, const wxString &connectionAddress,
   recentsentMsgsListCtrl->Bind(wxEVT_LIST_ITEM_RIGHT_CLICK, &BaseComPanel::onRecentMessageRightClick, this);
 
   for (const auto &message : Config::getListItemsFromConfig(m_recentSentMsgsConfigKey)) {
+    if (message.empty()) {
+      continue;
+    }
+
     recentsentMsgsListCtrl->InsertItem(0, message);
   }
 }
