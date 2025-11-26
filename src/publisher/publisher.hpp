@@ -1,5 +1,6 @@
 #pragma once
 
+#include <mutex>
 #include <string>
 #include <zmq.hpp>
 
@@ -10,17 +11,18 @@ public:
     return instance;
   }
 
-  ~Publisher();
+  void queueMessage(const std::string &port, const std::string &topic, const std::string &message);
 
-  void publish(const std::string &topic, const std::string &message, const std::string &connectionAddress);
-
-  std::string getConnectionAddress() const { return m_connectionAddress; }
+  std::string getPort() const { return m_port; }
 
 private:
   Publisher();
-  void resetSocket();
+  ~Publisher();
 
-  std::string m_connectionAddress;
-  zmq::context_t *m_context;
-  zmq::socket_t *m_socket;
+  void connect(const std::string &port);
+
+  std::mutex m_mutex;
+  std::string m_port;
+  std::unique_ptr<zmq::context_t> m_context;
+  std::unique_ptr<zmq::socket_t> m_socket;
 };

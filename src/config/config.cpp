@@ -18,7 +18,9 @@ void Config::createConfigFileIfNotExists() {
   // Create default config
   nlohmann::json defaultConfig = {{"requester_address", "tcp://localhost:4001"},
                                   {"subscriber_address", "tcp://localhost:4002"},
-                                  {"requester_recent_messages", {""}}};
+                                  {"publisher_port", "4002"},
+                                  {"requester_recent_messages", {""}},
+                                  {"publisher_recent_messages", {""}}};
 
   // Write default config to file
   std::ofstream configFile(CONFIG_FILE_PATH);
