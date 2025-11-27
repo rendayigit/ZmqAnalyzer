@@ -81,6 +81,20 @@ PublisherPanel::PublisherPanel(wxWindow *parent)
 void PublisherPanel::onPublishMessage(wxCommandEvent &event) {
   Config::updateKeyInConfig(CONFIG_PUBLISHER_LAST_TOPIC_KEY, topicTxtCtrl->GetValue().ToStdString());
 
+  std::string message = messageTxtCtrl->GetValue().ToStdString();
+  bool isItemFound = false;
+  for (int i = 0; i < recentPublishedMsgsListCtrl->GetItemCount(); ++i) {
+    if (message == recentPublishedMsgsListCtrl->GetItemText(i)) {
+      isItemFound = true;
+      break;
+    }
+  }
+
+  if (not isItemFound) {
+    recentPublishedMsgsListCtrl->InsertItem(0, message);
+    Config::addValueToListInConfig(CONFIG_RECENT_PUBLISH_KEY, message);
+  }
+
   Publisher::getInstance().queueMessage(portTxtCtrl->GetValue().ToStdString(), topicTxtCtrl->GetValue().ToStdString(),
                                         messageTxtCtrl->GetValue().ToStdString());
 
