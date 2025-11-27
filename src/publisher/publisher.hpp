@@ -4,6 +4,8 @@
 #include <string>
 #include <zmq.hpp>
 
+const std::string CONFIG_PUBLISHER_PORT_KEY = "publisher_port";
+
 class Publisher {
 public:
   static Publisher &getInstance() {

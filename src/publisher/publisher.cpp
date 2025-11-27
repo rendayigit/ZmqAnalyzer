@@ -5,15 +5,12 @@
 
 #include <thread>
 
-const std::string CONFIG_ADDRESS_KEY = "publisher_port";
 constexpr int MAX_CONTEXT_THREAD_COUNT = 1;
 constexpr int BINDING_DELAY = 200;
 
 Publisher::Publisher()
     : m_context(std::make_unique<zmq::context_t>(MAX_CONTEXT_THREAD_COUNT)),
-      m_socket(std::make_unique<zmq::socket_t>(*m_context, zmq::socket_type::pub)) {
-  connect(Config::getValueFromConfig(CONFIG_ADDRESS_KEY));
-}
+      m_socket(std::make_unique<zmq::socket_t>(*m_context, zmq::socket_type::pub)) {}
 
 Publisher::~Publisher() {
   if (m_socket) {
@@ -34,7 +31,7 @@ Publisher::~Publisher() {
 void Publisher::connect(const std::string &port) {
   if (not port.empty() and port != m_port) {
     m_port = port;
-    Config::updateKeyInConfig(CONFIG_ADDRESS_KEY, m_port);
+    Config::updateKeyInConfig(CONFIG_PUBLISHER_PORT_KEY, m_port);
 
     try {
       m_socket->bind("tcp://0.0.0.0:" + port);

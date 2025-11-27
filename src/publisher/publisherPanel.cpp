@@ -21,7 +21,7 @@ PublisherPanel::PublisherPanel(wxWindow *parent)
       messageSzr(new wxBoxSizer(wxVERTICAL)),
       controlsSzr(new wxBoxSizer(wxVERTICAL)) {
   auto *portLbl = new wxStaticText(this, wxID_ANY, "Publisher Port:");
-  portTxtCtrl = new wxTextCtrl(this, wxID_ANY, Publisher::getInstance().getPort(), wxDefaultPosition,
+  portTxtCtrl = new wxTextCtrl(this, wxID_ANY, Config::getValueFromConfig(CONFIG_PUBLISHER_PORT_KEY), wxDefaultPosition,
                                wxSize(ADDRESS_WIDTH, -1), wxTE_PROCESS_ENTER);
 
   topSzr->Add(portLbl, 0, WX_CENTER, wxSizerFlags::GetDefaultBorder());
