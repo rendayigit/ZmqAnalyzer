@@ -2,8 +2,7 @@
 
 ## High Priority
 
-- Save most recent topic for subscriber
-- Save most recent topic for publisher
+- Subscriber cannot show multiple subscribed topics correctly and crashes
 - Save recent messages for publisher
 
 ## Low Priority

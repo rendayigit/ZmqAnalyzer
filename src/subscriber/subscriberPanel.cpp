@@ -1,11 +1,13 @@
 #include "subscriberPanel.hpp"
 
+#include "config.hpp"
 #include "subscriber.hpp"
 #include "wxConstants.hpp"
 
 #include <vector>
 #include <wx/tokenzr.h>
 
+const std::string CONFIG_SUBSCRIBER_LAST_TOPIC_KEY = "subscriber_last_topic";
 constexpr int ADDRESS_WIDTH = 200;
 constexpr int MESSAGE_LIST_CTRL_TOPIC_WIDTH = 100;
 constexpr int MESSAGE_LIST_CTRL_MESSAGE_WIDTH = 850;
@@ -23,7 +25,8 @@ SubscriberPanel::SubscriberPanel(wxWindow *parent)
   addressTxtCtrl = new wxTextCtrl(this, wxID_ANY, Subscriber::getInstance().getConnectionAddress(), wxDefaultPosition,
                                   wxSize(ADDRESS_WIDTH, -1), wxTE_PROCESS_ENTER);
   topicLbl = new wxStaticText(this, wxID_ANY, "Subscribe to topics:");
-  topicTxtCtrl = new wxTextCtrl(this, wxID_ANY, "TIME", wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
+  topicTxtCtrl = new wxTextCtrl(this, wxID_ANY, Config::getValueFromConfig(CONFIG_SUBSCRIBER_LAST_TOPIC_KEY),
+                                wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
   topicTxtCtrl->SetToolTip("Enter topics to subscribe to, separated by commas. Then click 'Start'.");
 
   topSzr->Add(addressLbl, 0, WX_CENTER, wxSizerFlags::GetDefaultBorder());
@@ -32,7 +35,7 @@ SubscriberPanel::SubscriberPanel(wxWindow *parent)
   topSzr->Add(topicTxtCtrl, 1, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
 
   mainSzr->Add(topSzr, 0, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
-  
+
   messageListLbl = new wxStaticText(this, wxID_ANY, "Received messages:");
   mainSzr->Add(messageListLbl, 0, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
 
@@ -81,6 +84,8 @@ SubscriberPanel::SubscriberPanel(wxWindow *parent)
 
 void SubscriberPanel::onStartSubscriber( // NOLINT(readability-convert-member-functions-to-static)
     wxCommandEvent &event) {
+
+  Config::updateKeyInConfig(CONFIG_SUBSCRIBER_LAST_TOPIC_KEY, topicTxtCtrl->GetValue().ToStdString());
 
   std::vector<std::string> topics;
   wxStringTokenizer tokenizer(topicTxtCtrl->GetValue(), ",");

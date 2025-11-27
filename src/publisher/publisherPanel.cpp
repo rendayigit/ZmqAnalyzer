@@ -9,7 +9,9 @@
 #include <wx/clipbrd.h>
 
 const std::string CONFIG_RECENT_PUBLISH_KEY = "publisher_recent_messages";
+const std::string CONFIG_PUBLISHER_LAST_TOPIC_KEY = "publisher_last_topic";
 constexpr int ADDRESS_WIDTH = 200;
+constexpr int TOPIC_TEXT_CTRL_WIDTH = 150;
 constexpr int SEND_MSG_TEXT_AREA_WIDTH = 400;
 constexpr int SEND_MSG_LIST_COL_WIDTH = SEND_MSG_TEXT_AREA_WIDTH + 600;
 
@@ -28,7 +30,8 @@ PublisherPanel::PublisherPanel(wxWindow *parent)
   topSzr->Add(portTxtCtrl, 0, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
 
   auto *topicLbl = new wxStaticText(this, WX_ALIGN_LEFT, "Topic:");
-  topicTxtCtrl = new wxTextCtrl(this, wxID_ANY, "", wxDefaultPosition, wxSize(150, -1));
+  topicTxtCtrl = new wxTextCtrl(this, wxID_ANY, Config::getValueFromConfig(CONFIG_PUBLISHER_LAST_TOPIC_KEY),
+                                wxDefaultPosition, wxSize(TOPIC_TEXT_CTRL_WIDTH, -1));
 
   publishBtn = new wxButton(this, wxID_ANY, "Publish");
 
@@ -76,6 +79,8 @@ PublisherPanel::PublisherPanel(wxWindow *parent)
 }
 
 void PublisherPanel::onPublishMessage(wxCommandEvent &event) {
+  Config::updateKeyInConfig(CONFIG_PUBLISHER_LAST_TOPIC_KEY, topicTxtCtrl->GetValue().ToStdString());
+
   Publisher::getInstance().queueMessage(portTxtCtrl->GetValue().ToStdString(), topicTxtCtrl->GetValue().ToStdString(),
                                         messageTxtCtrl->GetValue().ToStdString());
 

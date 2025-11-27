@@ -20,7 +20,9 @@ void Config::createConfigFileIfNotExists() {
                                   {"subscriber_address", "tcp://localhost:4002"},
                                   {"publisher_port", "4002"},
                                   {"requester_recent_messages", {""}},
-                                  {"publisher_recent_messages", {""}}};
+                                  {"publisher_recent_messages", {""}},
+                                  {"subscriber_last_topic", "TOPIC"},
+                                  {"publisher_last_topic", "TOPIC"}};
 
   // Write default config to file
   std::ofstream configFile(CONFIG_FILE_PATH);
