@@ -43,7 +43,6 @@ private:
   void onDeleteContextMenu(wxCommandEvent &event);
 
   std::function<void(const std::string &)> m_sendMessageCallback;
-  std::function<std::string()> m_recvMessageCallback;
 
   std::string m_recentSentMsgsConfigKey;
 };
