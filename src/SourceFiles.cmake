@@ -10,6 +10,8 @@ set(SOURCEFILES
     ${CMAKE_CURRENT_LIST_DIR}/subscriber/topicFrame.cpp
     ${CMAKE_CURRENT_LIST_DIR}/requester/requesterPanel.cpp
     ${CMAKE_CURRENT_LIST_DIR}/requester/requester.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/publisher/publisherPanel.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/publisher/publisher.cpp
 )
 
 set(INCLUDEDIRS

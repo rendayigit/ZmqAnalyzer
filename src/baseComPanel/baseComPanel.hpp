@@ -14,20 +14,6 @@ protected:
   void recvMessage(const std::string &message);
   std::string getConnectionAddress() const;
 
-private:
-  void onSendMessage(wxCommandEvent &event);
-  void onRecentMessageSelected(wxListEvent &event);
-  void onRecentMessageRightClick(wxListEvent &event);
-
-  void onUseContextMenu(wxCommandEvent &event);
-  void onCopyContextMenu(wxCommandEvent &event);
-  void onDeleteContextMenu(wxCommandEvent &event);
-
-  std::function<void(const std::string &)> m_sendMessageCallback;
-  std::function<std::string()> m_recvMessageCallback;
-
-  std::string m_recentSentMsgsConfigKey;
-
   wxBoxSizer *mainSzr;
   wxBoxSizer *topSzr;
   wxBoxSizer *msgSzr;
@@ -46,4 +32,18 @@ private:
   wxTextCtrl *recvMsgTxtCtrl;
 
   wxButton *sendMsgBtn;
+
+private:
+  void onSendMessage(wxCommandEvent &event);
+  void onRecentMessageSelected(wxListEvent &event);
+  void onRecentMessageRightClick(wxListEvent &event);
+
+  void onUseContextMenu(wxCommandEvent &event);
+  void onCopyContextMenu(wxCommandEvent &event);
+  void onDeleteContextMenu(wxCommandEvent &event);
+
+  std::function<void(const std::string &)> m_sendMessageCallback;
+  std::function<std::string()> m_recvMessageCallback;
+
+  std::string m_recentSentMsgsConfigKey;
 };

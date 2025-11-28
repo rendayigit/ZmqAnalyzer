@@ -1,5 +1,6 @@
 #include "mainFrame.hpp"
 
+#include "publisher/publisherPanel.hpp"
 #include "requester/requesterPanel.hpp"
 #include "subscriber/subscriberPanel.hpp"
 #include "wxConstants.hpp"
@@ -40,6 +41,9 @@ MainFrame::MainFrame()
   // Create notebook with two tabs
   notebook = new wxNotebook(panel, wxID_ANY);
 
+  // Create publisher panel
+  publisher = new PublisherPanel(notebook); // NOLINT(cppcoreguidelines-prefer-member-initializer)
+
   // Create tab panels
   subscriber = new SubscriberPanel(notebook); // NOLINT(cppcoreguidelines-prefer-member-initializer)
 
@@ -47,6 +51,7 @@ MainFrame::MainFrame()
   requester = new RequesterPanel(notebook); // NOLINT(cppcoreguidelines-prefer-member-initializer)
 
   // Add tabs to notebook
+  notebook->AddPage(publisher, "Publisher");
   notebook->AddPage(subscriber, "Subscriber");
   notebook->AddPage(requester, "Requester");
 

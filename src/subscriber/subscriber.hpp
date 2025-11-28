@@ -1,10 +1,12 @@
 #pragma once
 
-#include <boost/asio.hpp>
+#include <atomic>
 #include <functional>
 #include <map>
+#include <mutex>
 #include <nlohmann/json.hpp>
 #include <string>
+#include <thread>
 #include <vector>
 #include <wx/string.h>
 #include <zmq.hpp>
@@ -32,7 +34,7 @@ public:
 private:
   Subscriber();
 
-  void step(boost::system::error_code const &errorCode);
+  void receiveLoop();
 
   std::function<void(nlohmann::json const &)> m_onMessageReceivedCallback;
 
@@ -40,13 +42,10 @@ private:
   zmq::context_t *m_context;
   zmq::socket_t *m_socket;
 
-  boost::asio::io_service m_subscriberService;
-  boost::asio::io_service::work m_subscriberWorker;
-  std::thread m_subscriberWorkerThread;
-  boost::asio::deadline_timer m_stepTimer;
-
-  std::thread m_stepTimerThread;
-  bool m_isRunning{};
+  std::thread m_pollingThread;
+  std::atomic<bool> m_isRunning{false};
 
   std::map<wxString, wxString> m_latestMessages;
+
+  std::mutex m_messagesMutex;
 };

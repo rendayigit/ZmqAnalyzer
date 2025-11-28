@@ -9,7 +9,7 @@ cmake \
 --target clean
 
 # Force Delete Dirs
-rm -rf $SCRIPTDIR/../bin/Zmq_Analyzer
+rm -rf $SCRIPTDIR/../bin/
 rm -rf $SCRIPTDIR/../build/
 rm -rf $SCRIPTDIR/../coverage/
 rm -rf $SCRIPTDIR/../.cache/

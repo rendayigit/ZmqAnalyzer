@@ -12,14 +12,11 @@ const std::string CONFIG_ADDRESS_KEY = "subscriber_address";
 constexpr int MAX_CONTEXT_THREAD_COUNT = 1;
 constexpr int BINDING_DELAY = 200;
 constexpr int SOCKET_TIMEOUT = 100;
-constexpr int SUBSCRIBER_INTERVAL_MILLIS = 10;
+constexpr int POLL_TIMEOUT = 100;
 
 Subscriber::Subscriber()
     : m_context(new zmq::context_t(MAX_CONTEXT_THREAD_COUNT)),
       m_socket(new zmq::socket_t(*m_context, zmq::socket_type::sub)),
-      m_subscriberWorker(m_subscriberService),
-      m_subscriberWorkerThread([&] { m_subscriberService.run(); }),
-      m_stepTimer(m_subscriberService),
       m_connectionAddress(Config::getValueFromConfig(CONFIG_ADDRESS_KEY)) {
   m_socket->set(zmq::sockopt::rcvtimeo, SOCKET_TIMEOUT);
 
@@ -35,14 +32,6 @@ Subscriber::Subscriber()
 
 Subscriber::~Subscriber() {
   stop();
-
-  if (not m_subscriberService.stopped()) {
-    m_subscriberService.stop();
-  }
-
-  if (m_subscriberWorkerThread.joinable()) {
-    m_subscriberWorkerThread.join();
-  }
 
   delete m_socket;
   delete m_context;
@@ -85,15 +74,7 @@ void Subscriber::start(const std::vector<std::string> &topics, const std::string
 
   m_isRunning = true;
 
-  // Ensure any existing step timer thread is stopped
-  if (m_stepTimerThread.joinable()) {
-    m_stepTimerThread.join();
-  }
-
-  m_stepTimerThread = std::thread([this]() {
-    m_stepTimer.expires_from_now(boost::posix_time::milliseconds(0));
-    step(boost::system::error_code());
-  });
+  m_pollingThread = std::thread(&Subscriber::receiveLoop, this);
 }
 
 void Subscriber::stop() {
@@ -103,10 +84,8 @@ void Subscriber::stop() {
 
   m_isRunning = false;
 
-  m_stepTimer.cancel();
-
-  if (m_stepTimerThread.joinable()) {
-    m_stepTimerThread.join();
+  if (m_pollingThread.joinable()) {
+    m_pollingThread.join();
   }
 
   // Unsubscribe from all topics
@@ -120,6 +99,8 @@ void Subscriber::stop() {
 }
 
 wxString Subscriber::getLatestMessage(const wxString &topic) {
+  std::lock_guard<std::mutex> lock(m_messagesMutex);
+
   auto it = m_latestMessages.find(topic);
 
   if (it != m_latestMessages.end()) {
@@ -129,54 +110,35 @@ wxString Subscriber::getLatestMessage(const wxString &topic) {
   return "";
 }
 
-void Subscriber::step(boost::system::error_code const &errorCode) {
-  // Abort step if stopped
-  if (not m_isRunning) {
-    return;
-  }
+void Subscriber::receiveLoop() {
+  while (m_isRunning) {
+    std::array<zmq::pollitem_t, 1> items{{{static_cast<void *>(*m_socket), 0, ZMQ_POLLIN, 0}}};
 
-  // Check if socket is valid before polling
-  if (m_socket == nullptr) {
-    return;
-  }
+    try {
+      zmq::poll(items.data(), items.size(), std::chrono::milliseconds(POLL_TIMEOUT));
 
-  // Poll the socket before receiving to avoid assertion failure
-  std::array<zmq::pollitem_t, 1> items{{{static_cast<void *>(*m_socket), 0, ZMQ_POLLIN, 0}}};
+      if ((static_cast<unsigned>(items[0].revents) & static_cast<unsigned>(ZMQ_POLLIN)) != 0) {
+        std::vector<zmq::message_t> recvMsgs;
+        zmq::recv_result_t result
+            = zmq::recv_multipart(*m_socket, std::back_inserter(recvMsgs), zmq::recv_flags::dontwait);
 
-  try {
-    zmq::poll(items.data(), items.size(), std::chrono::milliseconds(0)); // Non-blocking poll
+        if (result and *result == 2) {
+          std::string topic = recvMsgs.at(0).to_string();
+          std::string message = recvMsgs.at(1).to_string();
 
-    // Only try to receive if data is available
-    if ((static_cast<unsigned>(items[0].revents) & static_cast<unsigned>(ZMQ_POLLIN)) != 0) {
-      // Receive all parts of the message
-      std::vector<zmq::message_t> recvMsgs;
-      zmq::recv_result_t result
-          = zmq::recv_multipart(*m_socket, std::back_inserter(recvMsgs), zmq::recv_flags::dontwait);
+          nlohmann::json messageJson;
+          messageJson["topic"] = topic;
+          messageJson["message"] = message;
+          if (m_onMessageReceivedCallback) {
+            m_onMessageReceivedCallback(messageJson);
+          }
 
-      if (result and *result == 2) {
-        std::string topic = recvMsgs.at(0).to_string();
-        std::string message = recvMsgs.at(1).to_string();
-
-        nlohmann::json messageJson;
-        messageJson["topic"] = topic;
-        messageJson["message"] = message;
-        m_onMessageReceivedCallback(messageJson);
-
-        m_latestMessages[topic] = message;
+          std::lock_guard<std::mutex> lock(m_messagesMutex);
+          m_latestMessages[topic] = message;
+        }
       }
-    }
-  } catch (const zmq::error_t &e) {
-    // Log ZMQ errors but don't crash
-    Logger::warn("ZMQ error in step: " + std::string(e.what()));
-  }
-
-  // Reschedule the timer for the next step
-  if (not errorCode) {
-    m_stepTimer.expires_at(m_stepTimer.expires_at() + boost::posix_time::milliseconds(SUBSCRIBER_INTERVAL_MILLIS));
-    m_stepTimer.async_wait([this](const boost::system::error_code &newErrorCode) { step(newErrorCode); });
-  } else {
-    if (errorCode != boost::asio::error::operation_aborted) {
-      Logger::warn("Subscriber step error");
+    } catch (const zmq::error_t &e) {
+      Logger::warn("ZMQ error in receiveLoop: " + std::string(e.what()));
     }
   }
 }

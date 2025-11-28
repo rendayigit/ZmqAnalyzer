@@ -60,7 +60,11 @@ void TopicFrame::updateMessage(const wxString &message) {
   }
 
   wxTheApp->CallAfter([=]() { // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-    messageTxtCtrl->ChangeValue(messageJson);
+    try {
+      messageTxtCtrl->ChangeValue(messageJson);
+    } catch (...) {
+      // Ignore rare Unicode assertion errors
+    }
   });
 }
 
