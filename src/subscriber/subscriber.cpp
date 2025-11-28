@@ -74,9 +74,6 @@ void Subscriber::start(const std::vector<std::string> &topics, const std::string
 
   m_isRunning = true;
 
-  if (m_pollingThread.joinable()) {
-    m_pollingThread.join();
-  }
   m_pollingThread = std::thread(&Subscriber::receiveLoop, this);
 }
 
@@ -102,6 +99,8 @@ void Subscriber::stop() {
 }
 
 wxString Subscriber::getLatestMessage(const wxString &topic) {
+  std::lock_guard<std::mutex> lock(m_messagesMutex);
+
   auto it = m_latestMessages.find(topic);
 
   if (it != m_latestMessages.end()) {
@@ -134,6 +133,7 @@ void Subscriber::receiveLoop() {
             m_onMessageReceivedCallback(messageJson);
           }
 
+          std::lock_guard<std::mutex> lock(m_messagesMutex);
           m_latestMessages[topic] = message;
         }
       }

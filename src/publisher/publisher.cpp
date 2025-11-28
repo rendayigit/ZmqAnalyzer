@@ -34,6 +34,8 @@ void Publisher::connect(const std::string &port) {
     Config::updateKeyInConfig(CONFIG_PUBLISHER_PORT_KEY, m_port);
 
     try {
+      m_socket.reset();
+      m_socket = std::make_unique<zmq::socket_t>(*m_context, zmq::socket_type::pub);
       m_socket->bind("tcp://0.0.0.0:" + port);
       std::this_thread::sleep_for(std::chrono::milliseconds(BINDING_DELAY)); // Minor sleep to allow the socket to bind
     } catch (zmq::error_t &e) {

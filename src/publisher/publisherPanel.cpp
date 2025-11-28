@@ -29,7 +29,7 @@ PublisherPanel::PublisherPanel(wxWindow *parent)
   topSzr->Add(portLbl, 0, WX_CENTER, wxSizerFlags::GetDefaultBorder());
   topSzr->Add(portTxtCtrl, 0, WX_EXPAND, wxSizerFlags::GetDefaultBorder());
 
-  auto *topicLbl = new wxStaticText(this, WX_ALIGN_LEFT, "Topic:");
+  auto *topicLbl = new wxStaticText(this, wxID_ANY, "Topic:");
   topicTxtCtrl = new wxTextCtrl(this, wxID_ANY, Config::getValueFromConfig(CONFIG_PUBLISHER_LAST_TOPIC_KEY),
                                 wxDefaultPosition, wxSize(TOPIC_TEXT_CTRL_WIDTH, -1));
 

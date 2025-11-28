@@ -3,6 +3,7 @@
 #include <atomic>
 #include <functional>
 #include <map>
+#include <mutex>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <thread>
@@ -45,4 +46,6 @@ private:
   std::atomic<bool> m_isRunning{false};
 
   std::map<wxString, wxString> m_latestMessages;
+
+  std::mutex m_messagesMutex;
 };
