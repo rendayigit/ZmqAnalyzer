@@ -4459,7 +4459,7 @@ class GatherPanel(wx.Panel):
 
 class MainFrame(wx.Frame):
     def __init__(self):
-        super().__init__(None, title="ZmqAnalyzer (Python)", size=(900, 650))
+        super().__init__(None, title="ZmqAnalyzer", size=(1200, 800))
 
         self.notebook = wx.Notebook(self)
 
