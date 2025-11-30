@@ -12,7 +12,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/" && pwd)"
 SCRIPT_SOURCE="$PROJECT_ROOT/zmq_analyzer.py"
 
 echo "Project root: $PROJECT_ROOT"
@@ -73,7 +73,7 @@ create_desktop_shortcut() {
     USER_DESKTOP_DIR="/home/$SUDO_USER/Desktop"
     DESKTOP_FILE_CONTENT="[Desktop Entry]\nName=Run ZmqAnalyzer\nComment=Run ZmqAnalyzer UI for the ZmqAnalyzer Engine\nExec=zmqanalyzer\nIcon=$ICON_DIR/zmqanalyzer.png\nTerminal=false\nType=Application\nCategories=Utility;\n"
     DESKTOP_FILE_PATH="$APP_DIR/zmqanalyzer.desktop"
-    ICON_PATH="$PROJECT_ROOT/assets/icon.png"
+    ICON_PATH="$PROJECT_ROOT/zmqanalyzer.png"
 
     mkdir -p "$APP_DIR" || { print_error "Failed to create $APP_DIR"; return 1; }
     chown $SUDO_USER:$SUDO_USER "$APP_DIR" || { print_error "Failed to set ownership for $APP_DIR"; return 1; }
