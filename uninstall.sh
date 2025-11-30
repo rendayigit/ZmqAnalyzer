@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # ZmqAnalyzer Uninstallation Script
-# This script removes ZmqAnalyzer from standard Linux directories
 
 set -e  # Exit on any error
 
@@ -11,9 +10,6 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
-
-# Installation path
-ZMQ_ANALYZER_BINARY="/usr/local/bin/zmqanalyzer"
 
 # Functions to print colored output
 print_info() {
@@ -32,7 +28,7 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Function to check if running with sudo for system uninstallation
+# Function to check if running with sudo
 check_permissions() {
     if [[ -z "$SUDO_USER" ]]; then
         print_error "SUDO_USER not set. Please run this script with sudo."
@@ -40,73 +36,51 @@ check_permissions() {
     fi
 }
 
-# Function to remove binary
-remove_binary() {
-    if [[ -f "$ZMQ_ANALYZER_BINARY" ]]; then
-        print_info "Removing binary: $ZMQ_ANALYZER_BINARY"
-        if rm "$ZMQ_ANALYZER_BINARY"; then
-            print_success "Binary removed successfully"
-        else
-            print_error "Failed to remove binary"
-        fi
-    else
-        print_warning "Binary not found: $ZMQ_ANALYZER_BINARY"
-    fi
-}
+uninstall() {
+    print_info "Uninstalling ZmqAnalyzer..."
 
-# Function to remove desktop shortcut
-remove_desktop_shortcut() {
-    DESKTOP_SHORTCUT="/home/$SUDO_USER/Desktop/zmqanalyzer.desktop"
+    # Remove wrapper
+    WRAPPER="/usr/local/bin/zmqanalyzer"
+    if [ -f "$WRAPPER" ]; then
+        rm "$WRAPPER"
+        print_success "Removed $WRAPPER"
+    else
+        print_warning "$WRAPPER not found"
+    fi
+
+    # Remove desktop file
     DESKTOP_FILE="/home/$SUDO_USER/.local/share/applications/zmqanalyzer.desktop"
-    ICON_FILE="/home/$SUDO_USER/.local/share/icons/zmqanalyzer.png"
-
-    # Remove desktop shortcut from Desktop if it exists
-    if [[ -f "$DESKTOP_SHORTCUT" ]]; then
-        print_info "Removing desktop shortcut from Desktop: $DESKTOP_SHORTCUT"
-        if rm "$DESKTOP_SHORTCUT"; then
-            print_success "Desktop shortcut on Desktop removed successfully"
-        else
-            print_error "Failed to remove desktop shortcut from Desktop"
-        fi
+    if [ -f "$DESKTOP_FILE" ]; then
+        rm "$DESKTOP_FILE"
+        print_success "Removed $DESKTOP_FILE"
     else
-        print_warning "Desktop shortcut on Desktop not found: $DESKTOP_SHORTCUT"
+        print_warning "$DESKTOP_FILE not found"
     fi
 
-    # Remove desktop file if it exists
-    if [[ -f "$DESKTOP_FILE" ]]; then
-        print_info "Removing desktop shortcut: $DESKTOP_FILE"
-        if rm "$DESKTOP_FILE"; then
-            print_success "Desktop shortcut removed successfully"
-        else
-            print_error "Failed to remove desktop shortcut"
-        fi
+    # Remove desktop shortcut
+    DESKTOP_SHORTCUT="/home/$SUDO_USER/Desktop/zmqanalyzer.desktop"
+    if [ -f "$DESKTOP_SHORTCUT" ]; then
+        rm "$DESKTOP_SHORTCUT"
+        print_success "Removed $DESKTOP_SHORTCUT"
     else
-        print_warning "Desktop shortcut not found: $DESKTOP_FILE"
+        print_warning "$DESKTOP_SHORTCUT not found"
     fi
 
-    # Remove icon file if it exists
-    if [[ -f "$ICON_FILE" ]]; then
-        print_info "Removing icon: $ICON_FILE"
-        if rm "$ICON_FILE"; then
-            print_success "Icon removed successfully"
-        else
-            print_error "Failed to remove icon"
-        fi
+    # Remove icon
+    ICON="/home/$SUDO_USER/.local/share/icons/zmqanalyzer.png"
+    if [ -f "$ICON" ]; then
+        rm "$ICON"
+        print_success "Removed $ICON"
     else
-        print_warning "Icon not found: $ICON_FILE"
+        print_warning "$ICON not found"
     fi
+
+    print_success "Uninstallation complete."
 }
 
-# Main uninstallation process
 main() {
-    print_info "ZmqAnalyzer Uninstallation"
-
     check_permissions
-    remove_binary
-    remove_desktop_shortcut
-
-    print_success "ZmqAnalyzer uninstalled successfully!"
+    uninstall
 }
 
-# Run main function
 main "$@"
