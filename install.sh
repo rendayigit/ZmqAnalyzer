@@ -13,7 +13,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BINARY_SOURCE="$PROJECT_ROOT/bin/zmqanalyzer"
+SCRIPT_SOURCE="$PROJECT_ROOT/zmq_analyzer.py"
 
 echo "Project root: $PROJECT_ROOT"
 
@@ -45,34 +45,25 @@ check_permissions() {
     fi
 }
 
-# Function to check if binary exists
-check_binary() {
-    if [[ ! -f "$BINARY_SOURCE" ]]; then
-        print_error "Binary not found: $BINARY_SOURCE"
-        exit 1
-    fi
-    
-    print_success "Binary found"
-}
-
 # Function to install binary
 install_binary() {
-    print_info "Installing binary to $BIN_DIR..."
+    print_info "Installing wrapper to $BIN_DIR..."
     
     if ! mkdir -p "$BIN_DIR"; then
         print_error "Failed to create bin directory: $BIN_DIR"
         exit 1
     fi
     
-    if ! cp "$BINARY_SOURCE" "$BIN_DIR/"; then
-        print_error "Failed to copy binary"
-        exit 1
-    fi
+    # Create wrapper script
+    WRAPPER="$BIN_DIR/zmqanalyzer"
+    echo "#!/bin/bash" > "$WRAPPER"
+    echo "cd \"$PROJECT_ROOT\"" >> "$WRAPPER"
+    echo "python3 zmq_analyzer.py \"\$@\"" >> "$WRAPPER"
     
     # Set appropriate permissions
-    chmod 755 "$BIN_DIR/zmqanalyzer"
+    chmod 755 "$WRAPPER"
     
-    print_success "Binary installed successfully"
+    print_success "Wrapper installed successfully"
 }
 
 # Create desktop shortcut and copy icon for the invoking (non-root) user
@@ -102,10 +93,13 @@ create_desktop_shortcut() {
     print_info "Created desktop shortcut in: $APP_DIR"
 
     # Copy icon to icon directory
-    cp "$ICON_PATH" "$ICON_DIR/zmqanalyzer.png" || { print_error "Failed to copy icon to $ICON_DIR"; return 1; }
-    chown $SUDO_USER:$SUDO_USER "$ICON_DIR/zmqanalyzer.png" || { print_error "Failed to set ownership for $ICON_DIR/zmqanalyzer.png"; return 1; }
-
-    print_info "Created icon in: $ICON_DIR"
+    if [ -f "$ICON_PATH" ]; then
+        cp "$ICON_PATH" "$ICON_DIR/zmqanalyzer.png" || { print_error "Failed to copy icon to $ICON_DIR"; return 1; }
+        chown $SUDO_USER:$SUDO_USER "$ICON_DIR/zmqanalyzer.png" || { print_error "Failed to set ownership for $ICON_DIR/zmqanalyzer.png"; return 1; }
+        print_info "Created icon in: $ICON_DIR"
+    else
+        print_warning "Icon not found at $ICON_PATH, skipping icon copy."
+    fi
 
     print_success "Desktop shortcut created: $DESKTOP_FILE_PATH"
 }
@@ -114,7 +108,6 @@ create_desktop_shortcut() {
 main() {
     print_info "ZmqAnalyzer Installation"
     check_permissions
-    check_binary
     install_binary
     create_desktop_shortcut
     print_success "ZmqAnalyzer installed successfully!"

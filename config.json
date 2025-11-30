@@ -1,0 +1,13 @@
+{
+    "subscriber_address": "tcp://localhost:4002",
+    "subscriber_topics": "CESIUM,asd",
+    "publisher_port": "4002",
+    "recent_sent_msgs_pub": [
+        "123",
+        "Hello World"
+    ],
+    "replyer_address": "tcp://*:4001",
+    "recent_sent_msgs_rep": [
+        "asd"
+    ]
+}

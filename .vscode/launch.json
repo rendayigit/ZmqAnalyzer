@@ -2,19 +2,12 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Application Debug",
-      "type": "cppdbg",
+      "name": "Python: Current File",
+      "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/bin/zmqanalyzer",
-      "args": [],
-      "cwd": "${workspaceFolder}/bin/",
-      "setupCommands": [
-        {
-          "description": "Enable pretty-printing for gdb",
-          "text": "-enable-pretty-printing",
-          "ignoreFailures": true
-        }
-      ]
+      "program": "${workspaceFolder}/zmq_analyzer.py",
+      "console": "integratedTerminal",
+      "justMyCode": true
     }
   ]
 }
