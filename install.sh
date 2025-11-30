@@ -71,7 +71,7 @@ create_desktop_shortcut() {
     APP_DIR="/home/$SUDO_USER/.local/share/applications"
     ICON_DIR="/home/$SUDO_USER/.local/share/icons"
     USER_DESKTOP_DIR="/home/$SUDO_USER/Desktop"
-    DESKTOP_FILE_CONTENT="[Desktop Entry]\nName=Run ZmqAnalyzer\nComment=Run ZmqAnalyzer UI for the ZmqAnalyzer Engine\nExec=zmqanalyzer\nIcon=$ICON_DIR/zmqanalyzer.png\nTerminal=false\nType=Application\nCategories=Utility;\n"
+    DESKTOP_FILE_CONTENT="[Desktop Entry]\nName=Run ZmqAnalyzer\nComment=Run ZmqAnalyzer\nExec=zmqanalyzer\nIcon=$ICON_DIR/zmqanalyzer.png\nTerminal=false\nType=Application\nCategories=Utility;\n"
     DESKTOP_FILE_PATH="$APP_DIR/zmqanalyzer.desktop"
     ICON_PATH="$PROJECT_ROOT/zmqanalyzer.png"
 
