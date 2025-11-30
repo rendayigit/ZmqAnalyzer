@@ -374,43 +374,61 @@ class BaseComPanel(wx.Panel):
         self.top_sizer.Add(self.address_lbl, 0, wx.CENTER | wx.ALL, 5)
         self.top_sizer.Add(self.address_txt, 0, wx.EXPAND | wx.ALL, 5)
 
-        # Msg Sizer (Send/Recv)
-        self.msg_sizer = wx.BoxSizer(wx.HORIZONTAL)
-
-        # Send Side
+        # Create horizontal splitter for Send/Recv
+        self.h_splitter = wx.SplitterWindow(self, style=wx.SP_LIVE_UPDATE)
+        
+        # Send Side Panel
+        self.send_panel = wx.Panel(self.h_splitter)
         self.send_sizer = wx.BoxSizer(wx.VERTICAL)
-        self.send_lbl = wx.StaticText(self, label="Send:")
+        self.send_lbl = wx.StaticText(self.send_panel, label="Send:")
+        
+        # Vertical splitter for message and recent list
+        self.v_splitter = wx.SplitterWindow(self.send_panel, style=wx.SP_LIVE_UPDATE)
+        
+        # Message panel (in vertical splitter)
+        self.msg_panel = wx.Panel(self.v_splitter)
+        self.msg_panel_sizer = wx.BoxSizer(wx.VERTICAL)
         self.send_txt = wx.TextCtrl(
-            self,
+            self.msg_panel,
             value="Enter your message here",
             style=wx.TE_MULTILINE,
-            size=(400, 150),
         )
-
-        self.recent_panel = wx.Panel(self, style=wx.BORDER_SUNKEN)
+        self.msg_panel_sizer.Add(self.send_txt, 1, wx.EXPAND)
+        self.msg_panel.SetSizer(self.msg_panel_sizer)
+        
+        # Recent panel (in vertical splitter)
+        self.recent_panel = wx.Panel(self.v_splitter)
         self.recent_sizer = wx.BoxSizer(wx.VERTICAL)
         self.recent_list = wx.ListCtrl(self.recent_panel, style=wx.LC_REPORT)
         self.recent_list.InsertColumn(0, "Recently Sent Messages", width=450)
         self.recent_sizer.Add(self.recent_list, 1, wx.EXPAND)
         self.recent_panel.SetSizer(self.recent_sizer)
-
+        
+        self.v_splitter.SplitHorizontally(self.msg_panel, self.recent_panel)
+        self.v_splitter.SetSashGravity(0.5)
+        self.v_splitter.SetMinimumPaneSize(80)
+        
         self.send_sizer.Add(self.send_lbl, 0, wx.EXPAND | wx.ALL, 5)
-        self.send_sizer.Add(self.send_txt, 1, wx.EXPAND | wx.ALL, 5)
-        self.send_sizer.Add(self.recent_panel, 1, wx.EXPAND | wx.ALL, 5)
+        self.send_sizer.Add(self.v_splitter, 1, wx.EXPAND | wx.ALL, 5)
+        self.send_panel.SetSizer(self.send_sizer)
 
-        # Recv Side
+        # Recv Side Panel
+        self.recv_panel = wx.Panel(self.h_splitter)
         self.recv_sizer = wx.BoxSizer(wx.VERTICAL)
-        self.recv_lbl = wx.StaticText(self, label="Received:")
+        self.recv_lbl = wx.StaticText(self.recv_panel, label="Received:")
         self.recv_txt = wx.TextCtrl(
-            self,
-            value="\n\n\n\t\t\tReceived message will be displayed here",
+            self.recv_panel,
+            value="\n\n\n\t\tReceived message will be displayed here",
             style=wx.TE_MULTILINE | wx.TE_READONLY,
         )
         self.recv_sizer.Add(self.recv_lbl, 0, wx.EXPAND | wx.ALL, 5)
         self.recv_sizer.Add(self.recv_txt, 1, wx.EXPAND | wx.ALL, 5)
-
-        self.msg_sizer.Add(self.send_sizer, 1, wx.EXPAND | wx.ALL, 5)
-        self.msg_sizer.Add(self.recv_sizer, 1, wx.EXPAND | wx.ALL, 5)
+        self.recv_panel.SetSizer(self.recv_sizer)
+        
+        # Setup horizontal splitter
+        self.h_splitter.SplitVertically(self.send_panel, self.recv_panel)
+        self.h_splitter.SetSashGravity(0.5)
+        self.h_splitter.SetMinimumPaneSize(200)
 
         # Control Sizer
         self.ctrl_sizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -419,7 +437,7 @@ class BaseComPanel(wx.Panel):
         self.ctrl_sizer.Add(self.send_btn, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
 
         self.main_sizer.Add(self.top_sizer, 0, wx.EXPAND | wx.ALL, 5)
-        self.main_sizer.Add(self.msg_sizer, 1, wx.EXPAND | wx.ALL, 5)
+        self.main_sizer.Add(self.h_splitter, 1, wx.EXPAND | wx.ALL, 5)
         self.main_sizer.Add(self.ctrl_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
         self.SetSizer(self.main_sizer)
@@ -428,9 +446,28 @@ class BaseComPanel(wx.Panel):
         self.send_btn.Bind(wx.EVT_BUTTON, self.on_send_message)
         self.recent_list.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_recent_selected)
         self.recent_list.Bind(wx.EVT_LIST_ITEM_RIGHT_CLICK, self.on_recent_right_click)
+        self.Bind(wx.EVT_SIZE, self.on_size)
+        
+        self._splitters_initialized = False
 
         # Load Config
         self.load_recent_messages()
+
+    def on_size(self, event):
+        event.Skip()
+        if not self._splitters_initialized and self.GetSize().GetWidth() > 0:
+            wx.CallAfter(self._init_splitter_positions)
+            self._splitters_initialized = True
+
+    def _init_splitter_positions(self):
+        # Set horizontal splitter to 50%
+        h_size = self.h_splitter.GetSize().GetWidth()
+        if h_size > 0:
+            self.h_splitter.SetSashPosition(h_size // 2)
+        # Set vertical splitter to 50%
+        v_size = self.v_splitter.GetSize().GetHeight()
+        if v_size > 0:
+            self.v_splitter.SetSashPosition(v_size // 2)
 
     def load_recent_messages(self):
         msgs = Config.get_list(self.recent_msgs_key)
@@ -543,55 +580,73 @@ class ReplyerPanel(wx.Panel):
         default_port = default_addr.replace("tcp://*:", "")
         
         self.main_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.is_bound = False
         
         # Top Sizer (Port and Bind button)
         self.top_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.port_lbl = wx.StaticText(self, label="Port:")
         self.port_txt = wx.TextCtrl(self, value=default_port, size=(80, -1))
         self.bind_toggle_btn = wx.Button(self, label="Bind")
-        self.is_bound = False
         
         self.top_sizer.Add(self.port_lbl, 0, wx.CENTER | wx.ALL, 5)
         self.top_sizer.Add(self.port_txt, 0, wx.CENTER | wx.ALL, 5)
         self.top_sizer.Add(self.bind_toggle_btn, 0, wx.CENTER | wx.ALL, 5)
         
-        # Msg Sizer (Send/Recv)
-        self.msg_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        # Create horizontal splitter for Send/Recv
+        self.h_splitter = wx.SplitterWindow(self, style=wx.SP_LIVE_UPDATE)
         
-        # Send Side
+        # Send Side Panel
+        self.send_panel = wx.Panel(self.h_splitter)
         self.send_sizer = wx.BoxSizer(wx.VERTICAL)
-        self.send_lbl = wx.StaticText(self, label="Send:")
+        self.send_lbl = wx.StaticText(self.send_panel, label="Send:")
+        
+        # Vertical splitter for message and recent list
+        self.v_splitter = wx.SplitterWindow(self.send_panel, style=wx.SP_LIVE_UPDATE)
+        
+        # Message panel (in vertical splitter)
+        self.msg_panel = wx.Panel(self.v_splitter)
+        self.msg_panel_sizer = wx.BoxSizer(wx.VERTICAL)
         self.send_txt = wx.TextCtrl(
-            self,
+            self.msg_panel,
             value="Enter your message here",
             style=wx.TE_MULTILINE,
-            size=(400, 150),
         )
+        self.msg_panel_sizer.Add(self.send_txt, 1, wx.EXPAND)
+        self.msg_panel.SetSizer(self.msg_panel_sizer)
         
-        self.recent_panel = wx.Panel(self, style=wx.BORDER_SUNKEN)
+        # Recent panel (in vertical splitter)
+        self.recent_panel = wx.Panel(self.v_splitter)
         self.recent_sizer = wx.BoxSizer(wx.VERTICAL)
         self.recent_list = wx.ListCtrl(self.recent_panel, style=wx.LC_REPORT)
         self.recent_list.InsertColumn(0, "Recently Sent Messages", width=450)
         self.recent_sizer.Add(self.recent_list, 1, wx.EXPAND)
         self.recent_panel.SetSizer(self.recent_sizer)
         
-        self.send_sizer.Add(self.send_lbl, 0, wx.EXPAND | wx.ALL, 5)
-        self.send_sizer.Add(self.send_txt, 1, wx.EXPAND | wx.ALL, 5)
-        self.send_sizer.Add(self.recent_panel, 1, wx.EXPAND | wx.ALL, 5)
+        self.v_splitter.SplitHorizontally(self.msg_panel, self.recent_panel)
+        self.v_splitter.SetSashGravity(0.5)
+        self.v_splitter.SetMinimumPaneSize(80)
         
-        # Recv Side
+        self.send_sizer.Add(self.send_lbl, 0, wx.EXPAND | wx.ALL, 5)
+        self.send_sizer.Add(self.v_splitter, 1, wx.EXPAND | wx.ALL, 5)
+        self.send_panel.SetSizer(self.send_sizer)
+        
+        # Recv Side Panel
+        self.recv_panel = wx.Panel(self.h_splitter)
         self.recv_sizer = wx.BoxSizer(wx.VERTICAL)
-        self.recv_lbl = wx.StaticText(self, label="Received:")
+        self.recv_lbl = wx.StaticText(self.recv_panel, label="Received:")
         self.recv_txt = wx.TextCtrl(
-            self,
-            value="\n\n\n\t\t\tReceived message will be displayed here",
+            self.recv_panel,
+            value="\n\n\n\t\tReceived message will be displayed here",
             style=wx.TE_MULTILINE | wx.TE_READONLY,
         )
         self.recv_sizer.Add(self.recv_lbl, 0, wx.EXPAND | wx.ALL, 5)
         self.recv_sizer.Add(self.recv_txt, 1, wx.EXPAND | wx.ALL, 5)
+        self.recv_panel.SetSizer(self.recv_sizer)
         
-        self.msg_sizer.Add(self.send_sizer, 1, wx.EXPAND | wx.ALL, 5)
-        self.msg_sizer.Add(self.recv_sizer, 1, wx.EXPAND | wx.ALL, 5)
+        # Setup horizontal splitter
+        self.h_splitter.SplitVertically(self.send_panel, self.recv_panel)
+        self.h_splitter.SetSashGravity(0.5)
+        self.h_splitter.SetMinimumPaneSize(200)
         
         # Control Sizer
         self.ctrl_sizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -601,7 +656,7 @@ class ReplyerPanel(wx.Panel):
         self.ctrl_sizer.Add(self.send_btn, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
         
         self.main_sizer.Add(self.top_sizer, 0, wx.EXPAND | wx.ALL, 5)
-        self.main_sizer.Add(self.msg_sizer, 1, wx.EXPAND | wx.ALL, 5)
+        self.main_sizer.Add(self.h_splitter, 1, wx.EXPAND | wx.ALL, 5)
         self.main_sizer.Add(self.ctrl_sizer, 0, wx.EXPAND | wx.ALL, 5)
         
         self.SetSizer(self.main_sizer)
@@ -611,11 +666,30 @@ class ReplyerPanel(wx.Panel):
         self.send_btn.Bind(wx.EVT_BUTTON, self.on_send_message)
         self.recent_list.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_recent_selected)
         self.recent_list.Bind(wx.EVT_LIST_ITEM_RIGHT_CLICK, self.on_recent_right_click)
+        self.Bind(wx.EVT_SIZE, self.on_size)
+        
+        self._splitters_initialized = False
         
         # Load recent messages
         self.load_recent_messages()
         
         Replyer().set_callback(self.on_request_received)
+
+    def on_size(self, event):
+        event.Skip()
+        if not self._splitters_initialized and self.GetSize().GetWidth() > 0:
+            wx.CallAfter(self._init_splitter_positions)
+            self._splitters_initialized = True
+
+    def _init_splitter_positions(self):
+        # Set horizontal splitter to 50%
+        h_size = self.h_splitter.GetSize().GetWidth()
+        if h_size > 0:
+            self.h_splitter.SetSashPosition(h_size // 2)
+        # Set vertical splitter to 50%
+        v_size = self.v_splitter.GetSize().GetHeight()
+        if v_size > 0:
+            self.v_splitter.SetSashPosition(v_size // 2)
     
     def load_recent_messages(self):
         msgs = Config.get_list(CONFIG_RECENT_SENT_MSGS_REP_KEY)
@@ -769,24 +843,37 @@ class PublisherPanel(wx.Panel):
         self.controls_sizer.Add(self.topic_lbl, 0, wx.CENTER | wx.ALL, 5)
         self.controls_sizer.Add(self.topic_txt, 0, wx.CENTER | wx.ALL, 5)
 
-        # Message Area
+        # Create splitter for message area and recent list
+        self.splitter = wx.SplitterWindow(self, style=wx.SP_LIVE_UPDATE)
+        
+        # Message Area Panel
+        self.msg_panel = wx.Panel(self.splitter)
         self.msg_sizer = wx.BoxSizer(wx.VERTICAL)
-        self.msg_lbl = wx.StaticText(self, label="Message:")
-        self.msg_txt = wx.TextCtrl(self, value="Enter your message here", style=wx.TE_MULTILINE, size=(-1, 150))
+        self.msg_lbl = wx.StaticText(self.msg_panel, label="Message:")
+        self.msg_txt = wx.TextCtrl(self.msg_panel, value="Enter your message here", style=wx.TE_MULTILINE)
         self.msg_sizer.Add(self.msg_lbl, 0, wx.EXPAND | wx.ALL, 5)
         self.msg_sizer.Add(self.msg_txt, 1, wx.EXPAND | wx.ALL, 5)
+        self.msg_panel.SetSizer(self.msg_sizer)
 
-        # Recent List
-        self.recent_list = wx.ListCtrl(self, style=wx.LC_REPORT)
+        # Recent List Panel
+        self.recent_panel = wx.Panel(self.splitter)
+        self.recent_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.recent_list = wx.ListCtrl(self.recent_panel, style=wx.LC_REPORT)
         self.recent_list.InsertColumn(0, "Recently Published Messages", width=500)
+        self.recent_sizer.Add(self.recent_list, 1, wx.EXPAND)
+        self.recent_panel.SetSizer(self.recent_sizer)
+        
+        # Setup splitter
+        self.splitter.SplitHorizontally(self.msg_panel, self.recent_panel)
+        self.splitter.SetSashGravity(0.5)
+        self.splitter.SetMinimumPaneSize(80)
 
         # Publish Button
         self.pub_btn = wx.Button(self, label="Publish Message")
         self.pub_btn.Enable(False)
 
         self.main_sizer.Add(self.controls_sizer, 0, wx.EXPAND | wx.ALL, 5)
-        self.main_sizer.Add(self.msg_sizer, 0, wx.EXPAND | wx.ALL, 5)
-        self.main_sizer.Add(self.recent_list, 1, wx.EXPAND | wx.ALL, 5)
+        self.main_sizer.Add(self.splitter, 1, wx.EXPAND | wx.ALL, 5)
         self.main_sizer.Add(self.pub_btn, 0, wx.ALIGN_RIGHT | wx.ALL, 5)
 
         self.SetSizer(self.main_sizer)
@@ -795,8 +882,23 @@ class PublisherPanel(wx.Panel):
         self.pub_btn.Bind(wx.EVT_BUTTON, self.on_publish)
         self.recent_list.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_recent_selected)
         self.recent_list.Bind(wx.EVT_LIST_ITEM_RIGHT_CLICK, self.on_recent_right_click)
+        self.Bind(wx.EVT_SIZE, self.on_size)
+        
+        self._splitter_initialized = False
 
         self.load_recent()
+
+    def on_size(self, event):
+        event.Skip()
+        if not self._splitter_initialized and self.GetSize().GetWidth() > 0:
+            wx.CallAfter(self._init_splitter_position)
+            self._splitter_initialized = True
+
+    def _init_splitter_position(self):
+        # Set splitter to 50%
+        size = self.splitter.GetSize().GetHeight()
+        if size > 0:
+            self.splitter.SetSashPosition(size // 2)
 
     def on_bind_toggle(self, event):
         if self.is_bound:
@@ -1047,7 +1149,7 @@ class SubscriberPanel(wx.Panel):
         
         # Setup splitter
         self.splitter.SplitHorizontally(self.msg_panel, self.stats_panel)
-        self.splitter.SetSashGravity(0.6)  # Messages get 60% of space
+        self.splitter.SetSashGravity(0.5)  # Messages get 50% of space
         self.splitter.SetMinimumPaneSize(100)
 
         self.main_sizer.Add(self.controls_sizer, 0, wx.EXPAND | wx.ALL, 5)
@@ -1058,8 +1160,23 @@ class SubscriberPanel(wx.Panel):
         self.toggle_btn.Bind(wx.EVT_BUTTON, self.on_toggle)
         self.reset_stats_btn.Bind(wx.EVT_BUTTON, self.on_reset_stats)
         self.msg_list.Bind(wx.dataview.EVT_DATAVIEW_ITEM_ACTIVATED, self.on_item_activated)
+        self.Bind(wx.EVT_SIZE, self.on_size)
+        
+        self._splitter_initialized = False
 
         Subscriber().set_callback(self.on_message_received)
+
+    def on_size(self, event):
+        event.Skip()
+        if not self._splitter_initialized and self.GetSize().GetWidth() > 0:
+            wx.CallAfter(self._init_splitter_position)
+            self._splitter_initialized = True
+
+    def _init_splitter_position(self):
+        # Set splitter to 50%
+        size = self.splitter.GetSize().GetHeight()
+        if size > 0:
+            self.splitter.SetSashPosition(size // 2)
     
     def on_reset_stats(self, event):
         """Reset all statistics."""
