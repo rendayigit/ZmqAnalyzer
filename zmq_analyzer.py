@@ -4533,6 +4533,23 @@ class MainFrame(wx.Frame):
         info.SetWebSite("https://github.com/rendayigit/ZmqAnalyzer")
         info.AddDeveloper("Renda Yigit")
         info.AddDeveloper("GitHub Copilot")
+
+        # Try to load application icon from multiple locations
+        icon_paths = [
+            os.path.join(os.path.dirname(__file__), "zmqanalyzer.png"),  # Development
+            os.path.expanduser("~/.local/share/icons/zmqanalyzer.png"),  # Installed location
+        ]
+        for icon_path in icon_paths:
+            if os.path.exists(icon_path):
+                try:
+                    img = wx.Image(icon_path, wx.BITMAP_TYPE_PNG)
+                    img = img.Scale(64, 64, wx.IMAGE_QUALITY_HIGH)
+                    icon = wx.Icon(img.ConvertToBitmap())
+                    info.SetIcon(icon)
+                    break
+                except Exception:
+                    pass  # Try next location
+
         wx.adv.AboutBox(info)
 
     def on_exit(self, event):
