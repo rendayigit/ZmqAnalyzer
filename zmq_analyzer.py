@@ -1160,6 +1160,7 @@ class SubscriberPanel(wx.Panel):
         self.toggle_btn.Bind(wx.EVT_BUTTON, self.on_toggle)
         self.reset_stats_btn.Bind(wx.EVT_BUTTON, self.on_reset_stats)
         self.msg_list.Bind(wx.dataview.EVT_DATAVIEW_ITEM_ACTIVATED, self.on_item_activated)
+        self.msg_list.Bind(wx.dataview.EVT_DATAVIEW_ITEM_CONTEXT_MENU, self.on_msg_list_right_click)
         self.Bind(wx.EVT_SIZE, self.on_size)
         
         self._splitter_initialized = False
@@ -1177,6 +1178,18 @@ class SubscriberPanel(wx.Panel):
         size = self.splitter.GetSize().GetHeight()
         if size > 0:
             self.splitter.SetSashPosition(size // 2)
+
+    def on_msg_list_right_click(self, event):
+        """Show context menu for message list."""
+        menu = wx.Menu()
+        clear_item = menu.Append(wx.ID_ANY, "Clear Messages")
+        self.Bind(wx.EVT_MENU, self.on_clear_messages, clear_item)
+        self.PopupMenu(menu)
+        menu.Destroy()
+
+    def on_clear_messages(self, event):
+        """Clear all messages from the list."""
+        self.msg_list.DeleteAllItems()
     
     def on_reset_stats(self, event):
         """Reset all statistics."""
