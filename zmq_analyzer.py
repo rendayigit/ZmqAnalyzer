@@ -3,6 +3,7 @@ import os
 import threading
 import time
 import wx
+import wx.adv
 import wx.dataview
 import zmq
 
@@ -4506,10 +4507,33 @@ class MainFrame(wx.Frame):
         file_menu = wx.Menu()
         exit_item = file_menu.Append(wx.ID_EXIT, "Exit", "Exit application")
         menubar.Append(file_menu, "&File")
+
+        help_menu = wx.Menu()
+        about_item = help_menu.Append(wx.ID_ABOUT, "About", "About ZmqAnalyzer")
+        menubar.Append(help_menu, "&Help")
+
         self.SetMenuBar(menubar)
 
         self.Bind(wx.EVT_MENU, self.on_exit, exit_item)
+        self.Bind(wx.EVT_MENU, self.on_about, about_item)
         self.Bind(wx.EVT_CLOSE, self.on_close)
+
+    def on_about(self, event):
+        info = wx.adv.AboutDialogInfo()
+        info.SetName("ZmqAnalyzer")
+        info.SetVersion("1.0.0")
+        info.SetDescription(
+            "A desktop GUI application for testing and debugging ZeroMQ messaging.\n"
+            "Like Postman, but for ZMQ.\n\n"
+            "Supports PUB/SUB, REQ/REP, PUSH/PULL, DEALER/ROUTER,\n"
+            "CLIENT/SERVER, RADIO/DISH, SCATTER/GATHER, PAIR,\n"
+            "XPUB/XSUB, and STREAM patterns."
+        )
+        info.SetCopyright("(C) 2025 Renda Yigit")
+        info.SetWebSite("https://github.com/rendayigit/ZmqAnalyzer")
+        info.AddDeveloper("Renda Yigit")
+        info.AddDeveloper("GitHub Copilot")
+        wx.adv.AboutBox(info)
 
     def on_exit(self, event):
         self.Close()

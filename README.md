@@ -1,5 +1,7 @@
 # ZmqAnalyzer
 
+[![GitHub](https://img.shields.io/badge/GitHub-ZmqAnalyzer-blue?logo=github)](https://github.com/rendayigit/ZmqAnalyzer)
+
 <p align="center">
   <img src="zmqanalyzer.png" alt="ZmqAnalyzer Logo" width="128">
 </p>
