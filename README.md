@@ -1,5 +1,9 @@
 # ZmqAnalyzer
 
+<p align="center">
+  <img src="zmqanalyzer.png" alt="ZmqAnalyzer Logo" width="128">
+</p>
+
 A desktop GUI application for testing and debugging ZeroMQ messaging — like Postman, but for ZMQ.
 
 ## Features
