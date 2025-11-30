@@ -1169,15 +1169,134 @@ class StreamSocket:
                 print(f"Stream loop error: {e}")
 
 
+# --- UI Utility Functions ---
+
+
+def format_bytes(num_bytes):
+    """Format bytes to human readable string."""
+    if num_bytes >= 1024 * 1024:
+        return f"{num_bytes / (1024 * 1024):.2f} MB"
+    elif num_bytes >= 1024:
+        return f"{num_bytes / 1024:.2f} KB"
+    else:
+        return f"{num_bytes} bytes"
+
+
+def format_speed(bytes_per_sec):
+    """Format bytes/sec to human readable string."""
+    if bytes_per_sec >= 1024 * 1024:
+        return f"{bytes_per_sec / (1024 * 1024):.2f} MB/s"
+    elif bytes_per_sec >= 1024:
+        return f"{bytes_per_sec / 1024:.2f} KB/s"
+    else:
+        return f"{bytes_per_sec:.2f} B/s"
+
+
+def format_json_message(message):
+    """Format a message, pretty-printing JSON if valid."""
+    try:
+        if isinstance(message, dict):
+            return json.dumps(message, indent=2)
+        elif isinstance(message, str):
+            parsed = json.loads(message)
+            return json.dumps(parsed, indent=2)
+        else:
+            return str(message)
+    except json.JSONDecodeError:
+        return str(message)
+
+
+def to_single_line(msg):
+    """Convert a message to single line for display."""
+    return " ".join(msg.split())
+
+
+class RecentMessagesMixin:
+    """Mixin class providing recent messages functionality for panels with send capability."""
+
+    def setup_recent_messages(self, recent_msgs_key, msg_txt_ctrl, recent_list_ctrl):
+        """Initialize recent messages functionality. Call this in __init__."""
+        self.recent_msgs_key = recent_msgs_key
+        self.msg_txt = msg_txt_ctrl
+        self.recent_list = recent_list_ctrl
+        self.recent_messages = []
+
+        # Bind events
+        self.recent_list.Bind(wx.EVT_LISTBOX_DCLICK, self._on_recent_selected)
+        self.recent_list.Bind(wx.EVT_RIGHT_DOWN, self._on_recent_right_click)
+
+        # Load saved messages
+        self._load_recent_messages()
+
+    def _load_recent_messages(self):
+        """Load recent messages from config."""
+        msgs = Config.get_list(self.recent_msgs_key)
+        for msg in reversed(msgs):
+            self.recent_messages.insert(0, msg)
+            self.recent_list.Insert(to_single_line(msg), 0)
+
+    def add_to_recent(self, message):
+        """Add a message to recent list if not already present."""
+        if message not in self.recent_messages:
+            self.recent_messages.insert(0, message)
+            self.recent_list.Insert(to_single_line(message), 0)
+            Config.add_to_list(self.recent_msgs_key, message)
+
+    def _on_recent_selected(self, event):
+        """Handle double-click on recent message."""
+        selection = self.recent_list.GetSelection()
+        if selection != wx.NOT_FOUND:
+            self.msg_txt.SetValue(self.recent_messages[selection])
+
+    def _on_recent_right_click(self, event):
+        """Show context menu for recent messages."""
+        item = self.recent_list.HitTest(event.GetPosition())
+        if item != wx.NOT_FOUND:
+            self.recent_list.SetSelection(item)
+
+        menu = wx.Menu()
+        use_item = menu.Append(wx.ID_ANY, "Use Message")
+        copy_item = menu.Append(wx.ID_COPY, "Copy Message")
+        del_item = menu.Append(wx.ID_DELETE, "Delete Message")
+
+        self.Bind(wx.EVT_MENU, self._on_use_recent, use_item)
+        self.Bind(wx.EVT_MENU, self._on_copy_recent, copy_item)
+        self.Bind(wx.EVT_MENU, self._on_delete_recent, del_item)
+
+        self.recent_list.PopupMenu(menu, event.GetPosition())
+        menu.Destroy()
+
+    def _on_use_recent(self, event):
+        """Use selected recent message."""
+        selection = self.recent_list.GetSelection()
+        if selection != wx.NOT_FOUND:
+            self.msg_txt.SetValue(self.recent_messages[selection])
+
+    def _on_copy_recent(self, event):
+        """Copy selected recent message to clipboard."""
+        selection = self.recent_list.GetSelection()
+        if selection != wx.NOT_FOUND:
+            if wx.TheClipboard.Open():
+                wx.TheClipboard.SetData(wx.TextDataObject(self.recent_messages[selection]))
+                wx.TheClipboard.Close()
+
+    def _on_delete_recent(self, event):
+        """Delete selected recent message."""
+        selection = self.recent_list.GetSelection()
+        if selection != wx.NOT_FOUND:
+            msg = self.recent_messages[selection]
+            self.recent_messages.pop(selection)
+            self.recent_list.Delete(selection)
+            Config.remove_from_list(self.recent_msgs_key, msg)
+
+
 # --- UI Classes ---
 
 
-class BaseComPanel(wx.Panel):
+class BaseComPanel(wx.Panel, RecentMessagesMixin):
     def __init__(self, parent, connection_address, recent_msgs_key, send_callback):
         super().__init__(parent)
-        self.recent_msgs_key = recent_msgs_key
         self.send_callback = send_callback
-        self.recent_messages = []  # Store original messages
 
         self.main_sizer = wx.BoxSizer(wx.VERTICAL)
 
@@ -1259,14 +1378,13 @@ class BaseComPanel(wx.Panel):
 
         # Bindings
         self.send_btn.Bind(wx.EVT_BUTTON, self.on_send_message)
-        self.recent_list.Bind(wx.EVT_LISTBOX_DCLICK, self.on_recent_selected)
-        self.recent_list.Bind(wx.EVT_RIGHT_DOWN, self.on_recent_right_click)
         self.Bind(wx.EVT_SIZE, self.on_size)
 
         self._splitters_initialized = False
 
-        # Load Config
-        self.load_recent_messages()
+        # Setup recent messages mixin (uses self.send_txt as msg_txt)
+        self.msg_txt = self.send_txt
+        self.setup_recent_messages(recent_msgs_key, self.send_txt, self.recent_list)
 
     def on_size(self, event):
         event.Skip()
@@ -1275,24 +1393,12 @@ class BaseComPanel(wx.Panel):
             self._splitters_initialized = True
 
     def _init_splitter_positions(self):
-        # Set horizontal splitter to 50%
         h_size = self.h_splitter.GetSize().GetWidth()
         if h_size > 0:
             self.h_splitter.SetSashPosition(h_size // 2)
-        # Set vertical splitter to 50%
         v_size = self.v_splitter.GetSize().GetHeight()
         if v_size > 0:
             self.v_splitter.SetSashPosition(v_size // 2)
-
-    def _to_single_line(self, msg):
-        """Convert a message to single line for display."""
-        return " ".join(msg.split())
-
-    def load_recent_messages(self):
-        msgs = Config.get_list(self.recent_msgs_key)
-        for msg in reversed(msgs):
-            self.recent_messages.insert(0, msg)
-            self.recent_list.Insert(self._to_single_line(msg), 0)
 
     def on_send_message(self, event):
         message = self.send_txt.GetValue()
@@ -1304,79 +1410,19 @@ class BaseComPanel(wx.Panel):
             self.send_txt.SetValue(formatted)
             message = formatted
         except json.JSONDecodeError:
-            pass  # Not valid JSON, use as-is
+            pass
 
         if self.send_callback:
             self.send_callback(message)
 
-        # Add to recent if not already present
-        if message not in self.recent_messages:
-            self.recent_messages.insert(0, message)
-            self.recent_list.Insert(self._to_single_line(message), 0)
-            Config.add_to_list(self.recent_msgs_key, message)
+        self.add_to_recent(message)
 
     def recv_message(self, message):
         """Display received message with JSON formatting if applicable."""
-        try:
-            # Try to format JSON
-            if isinstance(message, str):
-                parsed = json.loads(message)
-                self.recv_txt.SetValue(json.dumps(parsed, indent=2))
-            elif isinstance(message, dict):
-                self.recv_txt.SetValue(json.dumps(message, indent=2))
-            else:
-                self.recv_txt.SetValue(str(message))
-        except json.JSONDecodeError:
-            self.recv_txt.SetValue(str(message))
-        except Exception as e:
-            print(f"Error displaying message: {e}")
-            self.recv_txt.SetValue(str(message))
+        self.recv_txt.SetValue(format_json_message(message))
 
     def get_connection_address(self):
         return self.address_txt.GetValue()
-
-    def on_recent_selected(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            self.send_txt.SetValue(self.recent_messages[selection])
-
-    def on_recent_right_click(self, event):
-        # Select item under cursor
-        item = self.recent_list.HitTest(event.GetPosition())
-        if item != wx.NOT_FOUND:
-            self.recent_list.SetSelection(item)
-
-        menu = wx.Menu()
-        use_item = menu.Append(wx.ID_ANY, "Use Message")
-        copy_item = menu.Append(wx.ID_COPY, "Copy Message")
-        del_item = menu.Append(wx.ID_DELETE, "Delete Message")
-
-        self.Bind(wx.EVT_MENU, self.on_use_context, use_item)
-        self.Bind(wx.EVT_MENU, self.on_copy_context, copy_item)
-        self.Bind(wx.EVT_MENU, self.on_delete_context, del_item)
-
-        self.recent_list.PopupMenu(menu, event.GetPosition())
-        menu.Destroy()
-
-    def on_use_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            self.send_txt.SetValue(self.recent_messages[selection])
-
-    def on_copy_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            if wx.TheClipboard.Open():
-                wx.TheClipboard.SetData(wx.TextDataObject(self.recent_messages[selection]))
-                wx.TheClipboard.Close()
-
-    def on_delete_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            msg = self.recent_messages[selection]
-            self.recent_messages.pop(selection)
-            self.recent_list.Delete(selection)
-            Config.remove_from_list(self.recent_msgs_key, msg)
 
 
 class RequesterPanel(BaseComPanel):
@@ -1391,10 +1437,9 @@ class RequesterPanel(BaseComPanel):
         Requester().request(message, addr)
 
 
-class ReplyerPanel(wx.Panel):
+class ReplyerPanel(wx.Panel, RecentMessagesMixin):
     def __init__(self, parent):
         super().__init__(parent)
-        self.recent_messages = []  # Store original messages
 
         # Extract port from config (remove tcp://*: prefix if present)
         default_addr = Config.get(CONFIG_REPLYER_ADDRESS_KEY, "tcp://*:5555")
@@ -1427,11 +1472,7 @@ class ReplyerPanel(wx.Panel):
         # Message panel (in vertical splitter)
         self.msg_panel = wx.Panel(self.v_splitter)
         self.msg_panel_sizer = wx.BoxSizer(wx.VERTICAL)
-        self.send_txt = wx.TextCtrl(
-            self.msg_panel,
-            value="Enter your message here",
-            style=wx.TE_MULTILINE,
-        )
+        self.send_txt = wx.TextCtrl(self.msg_panel, value="Enter your message here", style=wx.TE_MULTILINE)
         self.msg_panel_sizer.Add(self.send_txt, 1, wx.EXPAND)
         self.msg_panel.SetSizer(self.msg_panel_sizer)
 
@@ -1473,7 +1514,7 @@ class ReplyerPanel(wx.Panel):
         # Control Sizer
         self.ctrl_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.send_btn = wx.Button(self, label="Send Message")
-        self.send_btn.Enable(False)  # Disable until bound
+        self.send_btn.Enable(False)
         self.ctrl_sizer.AddStretchSpacer(1)
         self.ctrl_sizer.Add(self.send_btn, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
 
@@ -1486,14 +1527,13 @@ class ReplyerPanel(wx.Panel):
         # Bindings
         self.bind_toggle_btn.Bind(wx.EVT_BUTTON, self.on_bind_toggle)
         self.send_btn.Bind(wx.EVT_BUTTON, self.on_send_message)
-        self.recent_list.Bind(wx.EVT_LISTBOX_DCLICK, self.on_recent_selected)
-        self.recent_list.Bind(wx.EVT_RIGHT_DOWN, self.on_recent_right_click)
         self.Bind(wx.EVT_SIZE, self.on_size)
 
         self._splitters_initialized = False
 
-        # Load recent messages
-        self.load_recent_messages()
+        # Setup recent messages mixin
+        self.msg_txt = self.send_txt
+        self.setup_recent_messages(CONFIG_RECENT_SENT_MSGS_REP_KEY, self.send_txt, self.recent_list)
 
         Replyer().set_callback(self.on_request_received)
 
@@ -1504,28 +1544,15 @@ class ReplyerPanel(wx.Panel):
             self._splitters_initialized = True
 
     def _init_splitter_positions(self):
-        # Set horizontal splitter to 50%
         h_size = self.h_splitter.GetSize().GetWidth()
         if h_size > 0:
             self.h_splitter.SetSashPosition(h_size // 2)
-        # Set vertical splitter to 50%
         v_size = self.v_splitter.GetSize().GetHeight()
         if v_size > 0:
             self.v_splitter.SetSashPosition(v_size // 2)
 
-    def _to_single_line(self, msg):
-        """Convert a message to single line for display."""
-        return " ".join(msg.split())
-
-    def load_recent_messages(self):
-        msgs = Config.get_list(CONFIG_RECENT_SENT_MSGS_REP_KEY)
-        for msg in reversed(msgs):
-            self.recent_messages.insert(0, msg)
-            self.recent_list.Insert(self._to_single_line(msg), 0)
-
     def on_bind_toggle(self, event):
         if self.is_bound:
-            # Unbind
             success, message = Replyer().unbind()
             if success:
                 self.is_bound = False
@@ -1535,12 +1562,10 @@ class ReplyerPanel(wx.Panel):
             else:
                 wx.MessageBox(message, "Unbind Error", wx.OK | wx.ICON_ERROR)
         else:
-            # Bind
             port = self.port_txt.GetValue().strip()
             if not port:
                 wx.MessageBox("Please enter a port number", "Input Error", wx.OK | wx.ICON_WARNING)
                 return
-
             if not port.isdigit():
                 wx.MessageBox("Port must be a number", "Input Error", wx.OK | wx.ICON_WARNING)
                 return
@@ -1548,7 +1573,6 @@ class ReplyerPanel(wx.Panel):
             addr = f"tcp://*:{port}"
             Config.set(CONFIG_REPLYER_ADDRESS_KEY, addr)
             success, message = Replyer().bind(addr)
-
             if success:
                 self.is_bound = True
                 self.bind_toggle_btn.SetLabel("Unbind")
@@ -1559,109 +1583,36 @@ class ReplyerPanel(wx.Panel):
 
     def on_send_message(self, event):
         message = self.send_txt.GetValue()
-
-        # Try to format as JSON if valid
         try:
             parsed = json.loads(message)
             formatted = json.dumps(parsed, indent=2)
             self.send_txt.SetValue(formatted)
             message = formatted
         except json.JSONDecodeError:
-            pass  # Not valid JSON, use as-is
+            pass
 
-        self.send_reply(message)
-
-        # Add to recent
-        if message not in self.recent_messages:
-            self.recent_messages.insert(0, message)
-            self.recent_list.Insert(self._to_single_line(message), 0)
-            Config.add_to_list(CONFIG_RECENT_SENT_MSGS_REP_KEY, message)
+        Replyer().send_reply(message)
+        self.add_to_recent(message)
 
     def recv_message(self, message):
-        """Display received message with JSON formatting if applicable."""
-        try:
-            # Try to format JSON
-            if isinstance(message, str):
-                parsed = json.loads(message)
-                self.recv_txt.SetValue(json.dumps(parsed, indent=2))
-            elif isinstance(message, dict):
-                self.recv_txt.SetValue(json.dumps(message, indent=2))
-            else:
-                self.recv_txt.SetValue(str(message))
-        except json.JSONDecodeError:
-            self.recv_txt.SetValue(str(message))
-        except Exception as e:
-            print(f"Error displaying message: {e}")
-            self.recv_txt.SetValue(str(message))
-
-    def on_recent_selected(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            self.send_txt.SetValue(self.recent_messages[selection])
-
-    def on_recent_right_click(self, event):
-        # Select item under cursor
-        item = self.recent_list.HitTest(event.GetPosition())
-        if item != wx.NOT_FOUND:
-            self.recent_list.SetSelection(item)
-
-        menu = wx.Menu()
-        use_item = menu.Append(wx.ID_ANY, "Use Message")
-        copy_item = menu.Append(wx.ID_COPY, "Copy Message")
-        del_item = menu.Append(wx.ID_DELETE, "Delete Message")
-
-        self.Bind(wx.EVT_MENU, self.on_use_context, use_item)
-        self.Bind(wx.EVT_MENU, self.on_copy_context, copy_item)
-        self.Bind(wx.EVT_MENU, self.on_delete_context, del_item)
-
-        self.recent_list.PopupMenu(menu, event.GetPosition())
-        menu.Destroy()
-
-    def on_use_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            self.send_txt.SetValue(self.recent_messages[selection])
-
-    def on_copy_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            if wx.TheClipboard.Open():
-                wx.TheClipboard.SetData(wx.TextDataObject(self.recent_messages[selection]))
-                wx.TheClipboard.Close()
-
-    def on_delete_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            msg = self.recent_messages[selection]
-            self.recent_messages.pop(selection)
-            self.recent_list.Delete(selection)
-            Config.remove_from_list(CONFIG_RECENT_SENT_MSGS_REP_KEY, msg)
+        self.recv_txt.SetValue(format_json_message(message))
 
     def on_request_received(self, message):
         self.recv_message(message)
-        # In Replyer, "Received" is the request, "Send" is the reply.
-        # The user sees the request in "Received" box, types reply in "Send" box and clicks "Send Message".
-
-    def send_reply(self, message):
-        Replyer().send_reply(message)
 
 
-class PublisherPanel(wx.Panel):
+class PublisherPanel(wx.Panel, RecentMessagesMixin):
     def __init__(self, parent):
         super().__init__(parent)
-        self.recent_messages = []  # Store original messages
+        self.is_bound = False
 
         self.main_sizer = wx.BoxSizer(wx.VERTICAL)
-        self.is_bound = False
 
         # Controls
         self.controls_sizer = wx.BoxSizer(wx.HORIZONTAL)
-
         self.port_lbl = wx.StaticText(self, label="Port:")
         self.port_txt = wx.TextCtrl(self, value=Config.get(CONFIG_PUBLISHER_PORT_KEY, "5556"), size=(80, -1))
-
         self.bind_toggle_btn = wx.Button(self, label="Bind")
-
         self.topic_lbl = wx.StaticText(self, label="Topic:")
         self.topic_txt = wx.TextCtrl(self, value=Config.get(CONFIG_PUBLISHER_TOPIC_KEY, "test"), size=(100, -1))
 
@@ -1692,7 +1643,6 @@ class PublisherPanel(wx.Panel):
         self.recent_sizer.Add(self.recent_list, 1, wx.EXPAND)
         self.recent_panel.SetSizer(self.recent_sizer)
 
-        # Setup splitter
         self.splitter.SplitHorizontally(self.msg_panel, self.recent_panel)
         self.splitter.SetSashGravity(0.5)
         self.splitter.SetMinimumPaneSize(80)
@@ -1709,13 +1659,10 @@ class PublisherPanel(wx.Panel):
 
         self.bind_toggle_btn.Bind(wx.EVT_BUTTON, self.on_bind_toggle)
         self.pub_btn.Bind(wx.EVT_BUTTON, self.on_publish)
-        self.recent_list.Bind(wx.EVT_LISTBOX_DCLICK, self.on_recent_selected)
-        self.recent_list.Bind(wx.EVT_RIGHT_DOWN, self.on_recent_right_click)
         self.Bind(wx.EVT_SIZE, self.on_size)
 
         self._splitter_initialized = False
-
-        self.load_recent()
+        self.setup_recent_messages(CONFIG_RECENT_SENT_MSGS_PUB_KEY, self.msg_txt, self.recent_list)
 
     def on_size(self, event):
         event.Skip()
@@ -1724,14 +1671,12 @@ class PublisherPanel(wx.Panel):
             self._splitter_initialized = True
 
     def _init_splitter_position(self):
-        # Set splitter to 50%
         size = self.splitter.GetSize().GetHeight()
         if size > 0:
             self.splitter.SetSashPosition(size // 2)
 
     def on_bind_toggle(self, event):
         if self.is_bound:
-            # Unbind
             success, message = Publisher().unbind()
             if success:
                 self.is_bound = False
@@ -1741,12 +1686,10 @@ class PublisherPanel(wx.Panel):
             else:
                 wx.MessageBox(message, "Unbind Error", wx.OK | wx.ICON_ERROR)
         else:
-            # Bind
             port = self.port_txt.GetValue().strip()
             if not port:
                 wx.MessageBox("Please enter a port number", "Input Error", wx.OK | wx.ICON_WARNING)
                 return
-
             if not port.isdigit():
                 wx.MessageBox("Port must be a number", "Input Error", wx.OK | wx.ICON_WARNING)
                 return
@@ -1761,16 +1704,6 @@ class PublisherPanel(wx.Panel):
             else:
                 wx.MessageBox(message, "Bind Error", wx.OK | wx.ICON_ERROR)
 
-    def _to_single_line(self, msg):
-        """Convert a message to single line for display."""
-        return " ".join(msg.split())
-
-    def load_recent(self):
-        msgs = Config.get_list(CONFIG_RECENT_SENT_MSGS_PUB_KEY)
-        for msg in reversed(msgs):
-            self.recent_messages.insert(0, msg)
-            self.recent_list.Insert(self._to_single_line(msg), 0)
-
     def on_publish(self, event):
         topic = self.topic_txt.GetValue().strip()
         message = self.msg_txt.GetValue()
@@ -1779,71 +1712,21 @@ class PublisherPanel(wx.Panel):
             wx.MessageBox("Please enter a topic", "Input Error", wx.OK | wx.ICON_WARNING)
             return
 
-        # Try to format as JSON if valid
         try:
             parsed = json.loads(message)
             formatted = json.dumps(parsed, indent=2)
             self.msg_txt.SetValue(formatted)
             message = formatted
         except json.JSONDecodeError:
-            pass  # Not valid JSON, use as-is
+            pass
 
         success, msg = Publisher().send_message(topic, message)
         if not success:
             wx.MessageBox(msg, "Publish Error", wx.OK | wx.ICON_ERROR)
             return
 
-        # Save last used topic
         Config.set(CONFIG_PUBLISHER_TOPIC_KEY, topic)
-
-        # Add to recent
-        if message not in self.recent_messages:
-            self.recent_messages.insert(0, message)
-            self.recent_list.Insert(self._to_single_line(message), 0)
-            Config.add_to_list(CONFIG_RECENT_SENT_MSGS_PUB_KEY, message)
-
-    def on_recent_selected(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            self.msg_txt.SetValue(self.recent_messages[selection])
-
-    def on_recent_right_click(self, event):
-        # Select item under cursor
-        item = self.recent_list.HitTest(event.GetPosition())
-        if item != wx.NOT_FOUND:
-            self.recent_list.SetSelection(item)
-
-        menu = wx.Menu()
-        use_item = menu.Append(wx.ID_ANY, "Use Message")
-        copy_item = menu.Append(wx.ID_COPY, "Copy Message")
-        del_item = menu.Append(wx.ID_DELETE, "Delete Message")
-
-        self.Bind(wx.EVT_MENU, self.on_use_context, use_item)
-        self.Bind(wx.EVT_MENU, self.on_copy_context, copy_item)
-        self.Bind(wx.EVT_MENU, self.on_delete_context, del_item)
-
-        self.recent_list.PopupMenu(menu, event.GetPosition())
-        menu.Destroy()
-
-    def on_use_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            self.msg_txt.SetValue(self.recent_messages[selection])
-
-    def on_copy_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            if wx.TheClipboard.Open():
-                wx.TheClipboard.SetData(wx.TextDataObject(self.recent_messages[selection]))
-                wx.TheClipboard.Close()
-
-    def on_delete_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            msg = self.recent_messages[selection]
-            self.recent_messages.pop(selection)
-            self.recent_list.Delete(selection)
-            Config.remove_from_list(CONFIG_RECENT_SENT_MSGS_PUB_KEY, msg)
+        self.add_to_recent(message)
 
 
 class TopicFrame(wx.Frame):
@@ -2111,33 +1994,17 @@ class SubscriberPanel(wx.Panel):
         total_bytes = sum(s["bytes"] for s in self.topic_stats.values())
         total_topics = len(self.topic_stats)
 
-        # Format bytes nicely
-        if total_bytes >= 1024 * 1024:
-            bytes_str = f"{total_bytes / (1024 * 1024):.2f} MB"
-        elif total_bytes >= 1024:
-            bytes_str = f"{total_bytes / 1024:.2f} KB"
-        else:
-            bytes_str = f"{total_bytes} bytes"
-
         # Calculate overall rate and speed
         rate_str = "-"
         speed_str = "-"
         if self.start_time and self.topic_stats:
             elapsed = time.time() - self.start_time
             if elapsed > 0:
-                rate = total_msgs / elapsed
-                rate_str = f"{rate:.2f} msg/s"
-                speed = total_bytes / elapsed
-                if speed >= 1024 * 1024:
-                    speed_str = f"{speed / (1024 * 1024):.2f} MB/s"
-                elif speed >= 1024:
-                    speed_str = f"{speed / 1024:.2f} KB/s"
-                else:
-                    speed_str = f"{speed:.2f} B/s"
+                rate_str = f"{total_msgs / elapsed:.2f} msg/s"
+                speed_str = format_speed(total_bytes / elapsed)
 
-        # Update individual labels
         self.summary_msgs.SetLabel(str(total_msgs))
-        self.summary_bytes.SetLabel(bytes_str)
+        self.summary_bytes.SetLabel(format_bytes(total_bytes))
         self.summary_topics.SetLabel(str(total_topics))
         self.summary_rate.SetLabel(rate_str)
         self.summary_speed.SetLabel(speed_str)
@@ -2150,21 +2017,8 @@ class SubscriberPanel(wx.Panel):
 
         # Calculate rate
         elapsed = stats["last_time"] - stats["first_time"]
-        if elapsed > 0:
-            rate = stats["count"] / elapsed
-            rate_str = f"{rate:.2f}"
-        else:
-            rate_str = "-"
-
-        # Format bytes
-        if stats["bytes"] >= 1024 * 1024:
-            bytes_str = f"{stats['bytes'] / (1024 * 1024):.2f} MB"
-        elif stats["bytes"] >= 1024:
-            bytes_str = f"{stats['bytes'] / 1024:.2f} KB"
-        else:
-            bytes_str = f"{stats['bytes']} B"
-
-        # Format last received time
+        rate_str = f"{stats['count'] / elapsed:.2f}" if elapsed > 0 else "-"
+        bytes_str = format_bytes(stats["bytes"]).replace(" bytes", " B")
         last_time = time.strftime("%H:%M:%S", time.localtime(stats["last_time"]))
 
         # Find or add row
@@ -2231,22 +2085,19 @@ class SubscriberPanel(wx.Panel):
             self.topic_frames[topic].Raise()
 
 
-class PusherPanel(wx.Panel):
+class PusherPanel(wx.Panel, RecentMessagesMixin):
     """UI Panel for PUSH socket - sends messages to connected PULLers."""
 
     def __init__(self, parent):
         super().__init__(parent)
-        self.recent_messages = []
+        self.is_bound = False
 
         self.main_sizer = wx.BoxSizer(wx.VERTICAL)
-        self.is_bound = False
 
         # Controls
         self.controls_sizer = wx.BoxSizer(wx.HORIZONTAL)
-
         self.port_lbl = wx.StaticText(self, label="Port:")
         self.port_txt = wx.TextCtrl(self, value=Config.get(CONFIG_PUSHER_PORT_KEY, "5557"), size=(80, -1))
-
         self.bind_toggle_btn = wx.Button(self, label="Bind")
 
         self.controls_sizer.Add(self.port_lbl, 0, wx.CENTER | wx.ALL, 5)
@@ -2274,7 +2125,6 @@ class PusherPanel(wx.Panel):
         self.recent_sizer.Add(self.recent_list, 1, wx.EXPAND)
         self.recent_panel.SetSizer(self.recent_sizer)
 
-        # Setup splitter
         self.splitter.SplitHorizontally(self.msg_panel, self.recent_panel)
         self.splitter.SetSashGravity(0.5)
         self.splitter.SetMinimumPaneSize(80)
@@ -2291,12 +2141,10 @@ class PusherPanel(wx.Panel):
 
         self.bind_toggle_btn.Bind(wx.EVT_BUTTON, self.on_bind_toggle)
         self.push_btn.Bind(wx.EVT_BUTTON, self.on_push)
-        self.recent_list.Bind(wx.EVT_LISTBOX_DCLICK, self.on_recent_selected)
-        self.recent_list.Bind(wx.EVT_RIGHT_DOWN, self.on_recent_right_click)
         self.Bind(wx.EVT_SIZE, self.on_size)
 
         self._splitter_initialized = False
-        self.load_recent()
+        self.setup_recent_messages(CONFIG_RECENT_SENT_MSGS_PUSH_KEY, self.msg_txt, self.recent_list)
 
     def on_size(self, event):
         event.Skip()
@@ -2338,18 +2186,8 @@ class PusherPanel(wx.Panel):
             else:
                 wx.MessageBox(message, "Bind Error", wx.OK | wx.ICON_ERROR)
 
-    def _to_single_line(self, msg):
-        return " ".join(msg.split())
-
-    def load_recent(self):
-        msgs = Config.get_list(CONFIG_RECENT_SENT_MSGS_PUSH_KEY)
-        for msg in reversed(msgs):
-            self.recent_messages.insert(0, msg)
-            self.recent_list.Insert(self._to_single_line(msg), 0)
-
     def on_push(self, event):
         message = self.msg_txt.GetValue()
-
         try:
             parsed = json.loads(message)
             formatted = json.dumps(parsed, indent=2)
@@ -2363,52 +2201,7 @@ class PusherPanel(wx.Panel):
             wx.MessageBox(msg, "Push Error", wx.OK | wx.ICON_ERROR)
             return
 
-        if message not in self.recent_messages:
-            self.recent_messages.insert(0, message)
-            self.recent_list.Insert(self._to_single_line(message), 0)
-            Config.add_to_list(CONFIG_RECENT_SENT_MSGS_PUSH_KEY, message)
-
-    def on_recent_selected(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            self.msg_txt.SetValue(self.recent_messages[selection])
-
-    def on_recent_right_click(self, event):
-        item = self.recent_list.HitTest(event.GetPosition())
-        if item != wx.NOT_FOUND:
-            self.recent_list.SetSelection(item)
-
-        menu = wx.Menu()
-        use_item = menu.Append(wx.ID_ANY, "Use Message")
-        copy_item = menu.Append(wx.ID_COPY, "Copy Message")
-        del_item = menu.Append(wx.ID_DELETE, "Delete Message")
-
-        self.Bind(wx.EVT_MENU, self.on_use_context, use_item)
-        self.Bind(wx.EVT_MENU, self.on_copy_context, copy_item)
-        self.Bind(wx.EVT_MENU, self.on_delete_context, del_item)
-
-        self.recent_list.PopupMenu(menu, event.GetPosition())
-        menu.Destroy()
-
-    def on_use_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            self.msg_txt.SetValue(self.recent_messages[selection])
-
-    def on_copy_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            if wx.TheClipboard.Open():
-                wx.TheClipboard.SetData(wx.TextDataObject(self.recent_messages[selection]))
-                wx.TheClipboard.Close()
-
-    def on_delete_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            msg = self.recent_messages[selection]
-            self.recent_messages.pop(selection)
-            self.recent_list.Delete(selection)
-            Config.remove_from_list(CONFIG_RECENT_SENT_MSGS_PUSH_KEY, msg)
+        self.add_to_recent(message)
 
 
 class PullerPanel(wx.Panel):
@@ -2557,12 +2350,11 @@ class PullerPanel(wx.Panel):
         self.update_stats()
 
 
-class DealerPanel(wx.Panel):
+class DealerPanel(wx.Panel, RecentMessagesMixin):
     """UI Panel for DEALER socket - async REQ that can send multiple requests."""
 
     def __init__(self, parent):
         super().__init__(parent)
-        self.recent_messages = []
         self.is_connected = False
 
         self.main_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -2645,12 +2437,10 @@ class DealerPanel(wx.Panel):
 
         self.connect_toggle_btn.Bind(wx.EVT_BUTTON, self.on_connect_toggle)
         self.send_btn.Bind(wx.EVT_BUTTON, self.on_send_message)
-        self.recent_list.Bind(wx.EVT_LISTBOX_DCLICK, self.on_recent_selected)
-        self.recent_list.Bind(wx.EVT_RIGHT_DOWN, self.on_recent_right_click)
         self.Bind(wx.EVT_SIZE, self.on_size)
 
         self._splitters_initialized = False
-        self.load_recent_messages()
+        self.setup_recent_messages(CONFIG_RECENT_SENT_MSGS_DEALER_KEY, self.send_txt, self.recent_list)
         Dealer().set_callback(self.recv_message)
 
     def on_size(self, event):
@@ -2666,15 +2456,6 @@ class DealerPanel(wx.Panel):
         v_size = self.v_splitter.GetSize().GetHeight()
         if v_size > 0:
             self.v_splitter.SetSashPosition(v_size // 2)
-
-    def _to_single_line(self, msg):
-        return " ".join(msg.split())
-
-    def load_recent_messages(self):
-        msgs = Config.get_list(CONFIG_RECENT_SENT_MSGS_DEALER_KEY)
-        for msg in reversed(msgs):
-            self.recent_messages.insert(0, msg)
-            self.recent_list.Insert(self._to_single_line(msg), 0)
 
     def on_connect_toggle(self, event):
         if self.is_connected:
@@ -2715,10 +2496,7 @@ class DealerPanel(wx.Panel):
             wx.MessageBox(msg, "Send Error", wx.OK | wx.ICON_ERROR)
             return
 
-        if message not in self.recent_messages:
-            self.recent_messages.insert(0, message)
-            self.recent_list.Insert(self._to_single_line(message), 0)
-            Config.add_to_list(CONFIG_RECENT_SENT_MSGS_DEALER_KEY, message)
+        self.add_to_recent(message)
 
     def recv_message(self, message):
         try:
@@ -2732,55 +2510,12 @@ class DealerPanel(wx.Panel):
         except json.JSONDecodeError:
             self.recv_txt.SetValue(str(message))
 
-    def on_recent_selected(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            self.send_txt.SetValue(self.recent_messages[selection])
 
-    def on_recent_right_click(self, event):
-        item = self.recent_list.HitTest(event.GetPosition())
-        if item != wx.NOT_FOUND:
-            self.recent_list.SetSelection(item)
-
-        menu = wx.Menu()
-        use_item = menu.Append(wx.ID_ANY, "Use Message")
-        copy_item = menu.Append(wx.ID_COPY, "Copy Message")
-        del_item = menu.Append(wx.ID_DELETE, "Delete Message")
-
-        self.Bind(wx.EVT_MENU, self.on_use_context, use_item)
-        self.Bind(wx.EVT_MENU, self.on_copy_context, copy_item)
-        self.Bind(wx.EVT_MENU, self.on_delete_context, del_item)
-
-        self.recent_list.PopupMenu(menu, event.GetPosition())
-        menu.Destroy()
-
-    def on_use_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            self.send_txt.SetValue(self.recent_messages[selection])
-
-    def on_copy_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            if wx.TheClipboard.Open():
-                wx.TheClipboard.SetData(wx.TextDataObject(self.recent_messages[selection]))
-                wx.TheClipboard.Close()
-
-    def on_delete_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            msg = self.recent_messages[selection]
-            self.recent_messages.pop(selection)
-            self.recent_list.Delete(selection)
-            Config.remove_from_list(CONFIG_RECENT_SENT_MSGS_DEALER_KEY, msg)
-
-
-class RouterPanel(wx.Panel):
+class RouterPanel(wx.Panel, RecentMessagesMixin):
     """UI Panel for ROUTER socket - async REP that handles multiple clients."""
 
     def __init__(self, parent):
         super().__init__(parent)
-        self.recent_messages = []
         self.is_bound = False
 
         self.main_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -2860,12 +2595,10 @@ class RouterPanel(wx.Panel):
 
         self.bind_toggle_btn.Bind(wx.EVT_BUTTON, self.on_bind_toggle)
         self.send_btn.Bind(wx.EVT_BUTTON, self.on_send_reply)
-        self.recent_list.Bind(wx.EVT_LISTBOX_DCLICK, self.on_recent_selected)
-        self.recent_list.Bind(wx.EVT_RIGHT_DOWN, self.on_recent_right_click)
         self.Bind(wx.EVT_SIZE, self.on_size)
 
         self._splitters_initialized = False
-        self.load_recent_messages()
+        self.setup_recent_messages(CONFIG_RECENT_SENT_MSGS_ROUTER_KEY, self.send_txt, self.recent_list)
         Router().set_callback(self.on_request_received)
 
     def on_size(self, event):
@@ -2881,15 +2614,6 @@ class RouterPanel(wx.Panel):
         v_size = self.v_splitter.GetSize().GetHeight()
         if v_size > 0:
             self.v_splitter.SetSashPosition(v_size // 2)
-
-    def _to_single_line(self, msg):
-        return " ".join(msg.split())
-
-    def load_recent_messages(self):
-        msgs = Config.get_list(CONFIG_RECENT_SENT_MSGS_ROUTER_KEY)
-        for msg in reversed(msgs):
-            self.recent_messages.insert(0, msg)
-            self.recent_list.Insert(self._to_single_line(msg), 0)
 
     def on_bind_toggle(self, event):
         if self.is_bound:
@@ -2948,60 +2672,14 @@ class RouterPanel(wx.Panel):
             wx.MessageBox(msg, "Send Error", wx.OK | wx.ICON_ERROR)
             return
 
-        if message not in self.recent_messages:
-            self.recent_messages.insert(0, message)
-            self.recent_list.Insert(self._to_single_line(message), 0)
-            Config.add_to_list(CONFIG_RECENT_SENT_MSGS_ROUTER_KEY, message)
-
-    def on_recent_selected(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            self.send_txt.SetValue(self.recent_messages[selection])
-
-    def on_recent_right_click(self, event):
-        item = self.recent_list.HitTest(event.GetPosition())
-        if item != wx.NOT_FOUND:
-            self.recent_list.SetSelection(item)
-
-        menu = wx.Menu()
-        use_item = menu.Append(wx.ID_ANY, "Use Message")
-        copy_item = menu.Append(wx.ID_COPY, "Copy Message")
-        del_item = menu.Append(wx.ID_DELETE, "Delete Message")
-
-        self.Bind(wx.EVT_MENU, self.on_use_context, use_item)
-        self.Bind(wx.EVT_MENU, self.on_copy_context, copy_item)
-        self.Bind(wx.EVT_MENU, self.on_delete_context, del_item)
-
-        self.recent_list.PopupMenu(menu, event.GetPosition())
-        menu.Destroy()
-
-    def on_use_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            self.send_txt.SetValue(self.recent_messages[selection])
-
-    def on_copy_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            if wx.TheClipboard.Open():
-                wx.TheClipboard.SetData(wx.TextDataObject(self.recent_messages[selection]))
-                wx.TheClipboard.Close()
-
-    def on_delete_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            msg = self.recent_messages[selection]
-            self.recent_messages.pop(selection)
-            self.recent_list.Delete(selection)
-            Config.remove_from_list(CONFIG_RECENT_SENT_MSGS_ROUTER_KEY, msg)
+        self.add_to_recent(message)
 
 
-class PairPanel(wx.Panel):
+class PairPanel(wx.Panel, RecentMessagesMixin):
     """UI Panel for PAIR socket - exclusive 1:1 bidirectional connection."""
 
     def __init__(self, parent):
         super().__init__(parent)
-        self.recent_messages = []
         self.is_active = False
 
         self.main_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -3089,12 +2767,10 @@ class PairPanel(wx.Panel):
 
         self.connect_toggle_btn.Bind(wx.EVT_BUTTON, self.on_connect_toggle)
         self.send_btn.Bind(wx.EVT_BUTTON, self.on_send_message)
-        self.recent_list.Bind(wx.EVT_LISTBOX_DCLICK, self.on_recent_selected)
-        self.recent_list.Bind(wx.EVT_RIGHT_DOWN, self.on_recent_right_click)
         self.Bind(wx.EVT_SIZE, self.on_size)
 
         self._splitters_initialized = False
-        self.load_recent_messages()
+        self.setup_recent_messages(CONFIG_RECENT_SENT_MSGS_PAIR_KEY, self.send_txt, self.recent_list)
         PairSocket().set_callback(self.recv_message)
 
     def on_size(self, event):
@@ -3110,15 +2786,6 @@ class PairPanel(wx.Panel):
         v_size = self.v_splitter.GetSize().GetHeight()
         if v_size > 0:
             self.v_splitter.SetSashPosition(v_size // 2)
-
-    def _to_single_line(self, msg):
-        return " ".join(msg.split())
-
-    def load_recent_messages(self):
-        msgs = Config.get_list(CONFIG_RECENT_SENT_MSGS_PAIR_KEY)
-        for msg in reversed(msgs):
-            self.recent_messages.insert(0, msg)
-            self.recent_list.Insert(self._to_single_line(msg), 0)
 
     def on_connect_toggle(self, event):
         if self.is_active:
@@ -3173,10 +2840,7 @@ class PairPanel(wx.Panel):
             wx.MessageBox(msg, "Send Error", wx.OK | wx.ICON_ERROR)
             return
 
-        if message not in self.recent_messages:
-            self.recent_messages.insert(0, message)
-            self.recent_list.Insert(self._to_single_line(message), 0)
-            Config.add_to_list(CONFIG_RECENT_SENT_MSGS_PAIR_KEY, message)
+        self.add_to_recent(message)
 
     def recv_message(self, message):
         try:
@@ -3190,55 +2854,12 @@ class PairPanel(wx.Panel):
         except json.JSONDecodeError:
             self.recv_txt.SetValue(str(message))
 
-    def on_recent_selected(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            self.send_txt.SetValue(self.recent_messages[selection])
 
-    def on_recent_right_click(self, event):
-        item = self.recent_list.HitTest(event.GetPosition())
-        if item != wx.NOT_FOUND:
-            self.recent_list.SetSelection(item)
-
-        menu = wx.Menu()
-        use_item = menu.Append(wx.ID_ANY, "Use Message")
-        copy_item = menu.Append(wx.ID_COPY, "Copy Message")
-        del_item = menu.Append(wx.ID_DELETE, "Delete Message")
-
-        self.Bind(wx.EVT_MENU, self.on_use_context, use_item)
-        self.Bind(wx.EVT_MENU, self.on_copy_context, copy_item)
-        self.Bind(wx.EVT_MENU, self.on_delete_context, del_item)
-
-        self.recent_list.PopupMenu(menu, event.GetPosition())
-        menu.Destroy()
-
-    def on_use_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            self.send_txt.SetValue(self.recent_messages[selection])
-
-    def on_copy_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            if wx.TheClipboard.Open():
-                wx.TheClipboard.SetData(wx.TextDataObject(self.recent_messages[selection]))
-                wx.TheClipboard.Close()
-
-    def on_delete_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            msg = self.recent_messages[selection]
-            self.recent_messages.pop(selection)
-            self.recent_list.Delete(selection)
-            Config.remove_from_list(CONFIG_RECENT_SENT_MSGS_PAIR_KEY, msg)
-
-
-class XPublisherPanel(wx.Panel):
+class XPublisherPanel(wx.Panel, RecentMessagesMixin):
     """UI Panel for XPUB socket - publishes and shows subscription events."""
 
     def __init__(self, parent):
         super().__init__(parent)
-        self.recent_messages = []
 
         self.main_sizer = wx.BoxSizer(wx.VERTICAL)
         self.is_bound = False
@@ -3320,12 +2941,10 @@ class XPublisherPanel(wx.Panel):
 
         self.bind_toggle_btn.Bind(wx.EVT_BUTTON, self.on_bind_toggle)
         self.pub_btn.Bind(wx.EVT_BUTTON, self.on_publish)
-        self.recent_list.Bind(wx.EVT_LISTBOX_DCLICK, self.on_recent_selected)
-        self.recent_list.Bind(wx.EVT_RIGHT_DOWN, self.on_recent_right_click)
         self.Bind(wx.EVT_SIZE, self.on_size)
 
         self._splitters_initialized = False
-        self.load_recent()
+        self.setup_recent_messages(CONFIG_RECENT_SENT_MSGS_XPUB_KEY, self.msg_txt, self.recent_list)
         XPublisher().set_subscription_callback(self.on_subscription_event)
 
     def on_size(self, event):
@@ -3373,15 +2992,6 @@ class XPublisherPanel(wx.Panel):
         timestamp = time.strftime("%H:%M:%S")
         self.subs_list.AppendItem([timestamp, action, topic or "(all)"])
 
-    def _to_single_line(self, msg):
-        return " ".join(msg.split())
-
-    def load_recent(self):
-        msgs = Config.get_list(CONFIG_RECENT_SENT_MSGS_XPUB_KEY)
-        for msg in reversed(msgs):
-            self.recent_messages.insert(0, msg)
-            self.recent_list.Insert(self._to_single_line(msg), 0)
-
     def on_publish(self, event):
         topic = self.topic_txt.GetValue().strip()
         message = self.msg_txt.GetValue()
@@ -3403,52 +3013,7 @@ class XPublisherPanel(wx.Panel):
             wx.MessageBox(msg, "Publish Error", wx.OK | wx.ICON_ERROR)
             return
 
-        if message not in self.recent_messages:
-            self.recent_messages.insert(0, message)
-            self.recent_list.Insert(self._to_single_line(message), 0)
-            Config.add_to_list(CONFIG_RECENT_SENT_MSGS_XPUB_KEY, message)
-
-    def on_recent_selected(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            self.msg_txt.SetValue(self.recent_messages[selection])
-
-    def on_recent_right_click(self, event):
-        item = self.recent_list.HitTest(event.GetPosition())
-        if item != wx.NOT_FOUND:
-            self.recent_list.SetSelection(item)
-
-        menu = wx.Menu()
-        use_item = menu.Append(wx.ID_ANY, "Use Message")
-        copy_item = menu.Append(wx.ID_COPY, "Copy Message")
-        del_item = menu.Append(wx.ID_DELETE, "Delete Message")
-
-        self.Bind(wx.EVT_MENU, self.on_use_context, use_item)
-        self.Bind(wx.EVT_MENU, self.on_copy_context, copy_item)
-        self.Bind(wx.EVT_MENU, self.on_delete_context, del_item)
-
-        self.recent_list.PopupMenu(menu, event.GetPosition())
-        menu.Destroy()
-
-    def on_use_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            self.msg_txt.SetValue(self.recent_messages[selection])
-
-    def on_copy_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            if wx.TheClipboard.Open():
-                wx.TheClipboard.SetData(wx.TextDataObject(self.recent_messages[selection]))
-                wx.TheClipboard.Close()
-
-    def on_delete_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            msg = self.recent_messages[selection]
-            self.recent_messages.pop(selection)
-            self.recent_list.Delete(selection)
-            Config.remove_from_list(CONFIG_RECENT_SENT_MSGS_XPUB_KEY, msg)
+        self.add_to_recent(message)
 
 
 class XSubscriberPanel(wx.Panel):
@@ -3629,32 +3194,17 @@ class XSubscriberPanel(wx.Panel):
         total_bytes = sum(s["bytes"] for s in self.topic_stats.values())
         total_topics = len(self.topic_stats)
 
-        # Format bytes nicely
-        if total_bytes >= 1024 * 1024:
-            bytes_str = f"{total_bytes / (1024 * 1024):.2f} MB"
-        elif total_bytes >= 1024:
-            bytes_str = f"{total_bytes / 1024:.2f} KB"
-        else:
-            bytes_str = f"{total_bytes} bytes"
-
         # Calculate overall rate and speed
         rate_str = "-"
         speed_str = "-"
         if self.start_time and self.topic_stats:
             elapsed = time.time() - self.start_time
             if elapsed > 0:
-                rate = total_msgs / elapsed
-                rate_str = f"{rate:.2f} msg/s"
-                speed = total_bytes / elapsed
-                if speed >= 1024 * 1024:
-                    speed_str = f"{speed / (1024 * 1024):.2f} MB/s"
-                elif speed >= 1024:
-                    speed_str = f"{speed / 1024:.2f} KB/s"
-                else:
-                    speed_str = f"{speed:.2f} B/s"
+                rate_str = f"{total_msgs / elapsed:.2f} msg/s"
+                speed_str = format_speed(total_bytes / elapsed)
 
         self.summary_msgs.SetLabel(str(total_msgs))
-        self.summary_bytes.SetLabel(bytes_str)
+        self.summary_bytes.SetLabel(format_bytes(total_bytes))
         self.summary_topics.SetLabel(str(total_topics))
         self.summary_rate.SetLabel(rate_str)
         self.summary_speed.SetLabel(speed_str)
@@ -3667,21 +3217,8 @@ class XSubscriberPanel(wx.Panel):
 
         # Calculate rate
         elapsed = stats["last_time"] - stats["first_time"]
-        if elapsed > 0:
-            rate = stats["count"] / elapsed
-            rate_str = f"{rate:.2f}"
-        else:
-            rate_str = "-"
-
-        # Format bytes
-        if stats["bytes"] >= 1024 * 1024:
-            bytes_str = f"{stats['bytes'] / (1024 * 1024):.2f} MB"
-        elif stats["bytes"] >= 1024:
-            bytes_str = f"{stats['bytes'] / 1024:.2f} KB"
-        else:
-            bytes_str = f"{stats['bytes']} B"
-
-        # Format last received time
+        rate_str = f"{stats['count'] / elapsed:.2f}" if elapsed > 0 else "-"
+        bytes_str = format_bytes(stats["bytes"]).replace(" bytes", " B")
         last_time = time.strftime("%H:%M:%S", time.localtime(stats["last_time"]))
 
         # Find or add row
@@ -3735,12 +3272,11 @@ class XSubscriberPanel(wx.Panel):
         self.msg_list.DeleteAllItems()
 
 
-class StreamPanel(wx.Panel):
+class StreamPanel(wx.Panel, RecentMessagesMixin):
     """UI Panel for STREAM socket - raw TCP connection."""
 
     def __init__(self, parent):
         super().__init__(parent)
-        self.recent_messages = []
         self.is_active = False
 
         self.main_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -3830,12 +3366,10 @@ class StreamPanel(wx.Panel):
 
         self.connect_toggle_btn.Bind(wx.EVT_BUTTON, self.on_connect_toggle)
         self.send_btn.Bind(wx.EVT_BUTTON, self.on_send_message)
-        self.recent_list.Bind(wx.EVT_LISTBOX_DCLICK, self.on_recent_selected)
-        self.recent_list.Bind(wx.EVT_RIGHT_DOWN, self.on_recent_right_click)
         self.Bind(wx.EVT_SIZE, self.on_size)
 
         self._splitters_initialized = False
-        self.load_recent_messages()
+        self.setup_recent_messages(CONFIG_RECENT_SENT_MSGS_STREAM_KEY, self.send_txt, self.recent_list)
         StreamSocket().set_callback(self.recv_message)
 
     def on_size(self, event):
@@ -3851,15 +3385,6 @@ class StreamPanel(wx.Panel):
         v_size = self.v_splitter.GetSize().GetHeight()
         if v_size > 0:
             self.v_splitter.SetSashPosition(v_size // 2)
-
-    def _to_single_line(self, msg):
-        return " ".join(msg.split())
-
-    def load_recent_messages(self):
-        msgs = Config.get_list(CONFIG_RECENT_SENT_MSGS_STREAM_KEY)
-        for msg in reversed(msgs):
-            self.recent_messages.insert(0, msg)
-            self.recent_list.Insert(self._to_single_line(msg), 0)
 
     def on_connect_toggle(self, event):
         if self.is_active:
@@ -3906,10 +3431,7 @@ class StreamPanel(wx.Panel):
             wx.MessageBox(msg, "Send Error", wx.OK | wx.ICON_ERROR)
             return
 
-        if message not in self.recent_messages:
-            self.recent_messages.insert(0, message)
-            self.recent_list.Insert(self._to_single_line(message), 0)
-            Config.add_to_list(CONFIG_RECENT_SENT_MSGS_STREAM_KEY, message)
+        self.add_to_recent(message)
 
     def recv_message(self, peer_id, message):
         self.peer_lbl.SetLabel(f"Peer: {peer_id}")
@@ -3918,48 +3440,6 @@ class StreamPanel(wx.Panel):
         if current.startswith("\n\n\n\t\t"):
             current = ""
         self.recv_txt.SetValue(current + message)
-
-    def on_recent_selected(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            self.send_txt.SetValue(self.recent_messages[selection])
-
-    def on_recent_right_click(self, event):
-        item = self.recent_list.HitTest(event.GetPosition())
-        if item != wx.NOT_FOUND:
-            self.recent_list.SetSelection(item)
-
-        menu = wx.Menu()
-        use_item = menu.Append(wx.ID_ANY, "Use Message")
-        copy_item = menu.Append(wx.ID_COPY, "Copy Message")
-        del_item = menu.Append(wx.ID_DELETE, "Delete Message")
-
-        self.Bind(wx.EVT_MENU, self.on_use_context, use_item)
-        self.Bind(wx.EVT_MENU, self.on_copy_context, copy_item)
-        self.Bind(wx.EVT_MENU, self.on_delete_context, del_item)
-
-        self.recent_list.PopupMenu(menu, event.GetPosition())
-        menu.Destroy()
-
-    def on_use_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            self.send_txt.SetValue(self.recent_messages[selection])
-
-    def on_copy_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            if wx.TheClipboard.Open():
-                wx.TheClipboard.SetData(wx.TextDataObject(self.recent_messages[selection]))
-                wx.TheClipboard.Close()
-
-    def on_delete_context(self, event):
-        selection = self.recent_list.GetSelection()
-        if selection != wx.NOT_FOUND:
-            msg = self.recent_messages[selection]
-            self.recent_messages.pop(selection)
-            self.recent_list.Delete(selection)
-            Config.remove_from_list(CONFIG_RECENT_SENT_MSGS_STREAM_KEY, msg)
 
 
 class MainFrame(wx.Frame):
