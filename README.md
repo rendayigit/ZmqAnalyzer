@@ -8,10 +8,15 @@ A desktop GUI application for testing and debugging ZeroMQ messaging — like Po
 
 ## Features
 
-- **Publisher**: Bind to a port and publish messages with custom topics
-- **Subscriber**: Connect to publishers and filter messages by topic
-- **Requester**: Send requests and receive responses (REQ/REP pattern)
-- **Replyer**: Bind to a port and respond to incoming requests
+### Supported ZeroMQ Patterns
+
+| Pattern | Description |
+|---------|-------------|
+| **PUB/SUB** | Publish/Subscribe - one-to-many message broadcast with topic filtering |
+| **REQ/REP** | Request/Reply - synchronous RPC-style communication |
+| **PUSH/PULL** | Pipeline - task distribution with load balancing |
+| **DEALER/ROUTER** | Advanced async request/reply - handle multiple clients without blocking |
+| **PAIR** | Exclusive pair - simple 1:1 bidirectional connection |
 
 ### Additional Capabilities
 
@@ -75,6 +80,40 @@ sudo ./uninstall.sh
 2. Click **Bind** to start listening
 3. Incoming requests appear automatically
 4. Type a **Response** and click **Send** to reply
+
+### Pusher Tab (PUSH)
+
+1. Enter a **Port** number (e.g., `5557`)
+2. Click **Bind** to start the pusher
+3. Type your **Message**
+4. Click **Push** — messages are distributed to connected pullers in round-robin
+
+### Puller Tab (PULL)
+
+1. Enter the pusher **Address** (e.g., `tcp://localhost:5557`)
+2. Click **Start** to begin receiving messages
+3. Messages appear in the list as they arrive
+
+### Dealer Tab (DEALER)
+
+1. Enter a router **Address** (e.g., `tcp://localhost:5558`)
+2. Click **Connect** to establish connection
+3. Send multiple messages without waiting for replies (async)
+4. Replies appear in the received panel
+
+### Router Tab (ROUTER)
+
+1. Enter a **Port** number (e.g., `5558`)
+2. Click **Bind** to start listening
+3. Incoming requests from dealers appear automatically
+4. Type a **Reply** and click **Send** to respond
+
+### Pair Tab (PAIR)
+
+1. Select **Mode**: Connect (client) or Bind (server)
+2. Enter **Address** (e.g., `tcp://localhost:5559`) or port number for bind mode
+3. Click **Start** to establish exclusive 1:1 connection
+4. Send and receive messages bidirectionally
 
 ## Configuration
 
