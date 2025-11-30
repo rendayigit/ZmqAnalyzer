@@ -9,20 +9,30 @@ ZmqAnalyzer is a Python desktop application acting as a "Postman for ZeroMQ". It
 - **Single Script**: `zmq_analyzer.py` contains the entire application logic.
 - **Main UI**: `MainFrame` manages a `wx.Notebook` containing tabs for different ZMQ patterns.
 - **Panel Hierarchy**:
-  - `BaseComPanel`: Base class for communication panels (Requester, Replyer). Handles common UI elements.
-  - `PublisherPanel`, `SubscriberPanel`: Specific panels for PUB/SUB patterns.
+  - `BaseComPanel`: Base class for Requester panel. Handles common UI elements (address input, send/receive text areas, recent messages list).
+  - `PublisherPanel`: Standalone panel for PUB pattern with port-based binding.
+  - `SubscriberPanel`: Standalone panel for SUB pattern with topic filtering.
+  - `ReplyerPanel`: Standalone panel for REP pattern with port-based binding.
+  - `TopicFrame`: Popup window for viewing individual topic messages in Subscriber.
 - **ZMQ Logic**:
   - Encapsulated in Singleton classes (`Publisher`, `Subscriber`, `Requester`, `Replyer`).
   - Uses `pyzmq` for ZeroMQ interactions.
   - Threading is used for receiving messages to avoid blocking the UI.
   - `wx.CallAfter` is used to update UI from background threads.
+  - Timer-based throttling in `TopicFrame` to handle rapid message updates.
 
 ### Data Flow
-1. **User Action**: User clicks "Send" or "Start".
+1. **User Action**: User clicks "Bind"/"Unbind", "Start"/"Stop", or "Send"/"Publish".
 2. **UI Event**: Event handler calls ZMQ singleton method.
-3. **ZMQ Logic**: Performs socket operation (send/recv).
+3. **ZMQ Logic**: Performs socket operation (bind/unbind/send/recv).
 4. **Callback**: On receive, a callback updates the UI via `wx.CallAfter`.
-5. **Configuration**: Persistent data is handled by `Config` class using `json` module, stored in `config.json`.
+5. **Configuration**: Persistent data is handled by `Config` class using `json` module, stored in `~/.zmqanalyzer-config.json`.
+
+### UI Patterns
+- **Toggle Buttons**: Single buttons that switch between states (Bind/Unbind, Start/Stop) instead of separate button pairs.
+- **JSON Formatting**: Messages are automatically pretty-printed if they are valid JSON.
+- **Error Dialogs**: `wx.MessageBox` is used for displaying errors and warnings to users.
+- **Message Truncation**: Large messages (>100KB) are truncated in display to prevent UI freezing.
 
 ## Build & Workflow
 
@@ -31,11 +41,13 @@ ZmqAnalyzer is a Python desktop application acting as a "Postman for ZeroMQ". It
 - **wxPython**
 - **pyzmq**
 
-### Scripts
-- **Run**: `./scripts/run.sh` or `python zmq_analyzer.py`.
-- **Install Deps**: `pip install -r requirements.txt`.
+### Installation
+- `install.sh`: Installs the application system-wide with desktop shortcut (requires sudo).
+- `uninstall.sh`: Removes the installation (requires sudo).
 
 ## Coding Conventions
 - **Language**: Python 3.
 - **UI Library**: wxPython.
 - **Threading**: Use `threading` module for blocking ZMQ operations. Always use `wx.CallAfter` for UI updates from threads.
+- **Logging**: Use `print()` statements for console output (no logging module).
+- **Error Handling**: Show user-facing errors via `wx.MessageBox`, print technical details to console.

@@ -13,6 +13,34 @@
         "focus": false,
         "panel": "shared"
       }
+    },
+    {
+      "label": "Install App",
+      "type": "shell",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "command": ["chmod +x ./install.sh;", "sudo ./install.sh"],
+      "options": {
+        "cwd": "${workspaceFolder}/"
+      },
+      "problemMatcher": "$gcc",
+      "runOptions": { "reevaluateOnRerun": false }
+    },
+    {
+      "label": "Uninstall App",
+      "type": "shell",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "command": ["chmod +x ./uninstall.sh;", "sudo ./uninstall.sh"],
+      "options": {
+        "cwd": "${workspaceFolder}/"
+      },
+      "problemMatcher": "$gcc",
+      "runOptions": { "reevaluateOnRerun": false }
     }
   ]
 }
