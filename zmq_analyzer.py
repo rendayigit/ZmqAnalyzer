@@ -1,18 +1,13 @@
 import json
 import os
 import threading
-import logging
 import time
 import wx
 import wx.dataview
 import zmq
 
-# Setup logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
-
 # Constants
-CONFIG_FILE = "config.json"
+CONFIG_FILE = os.path.expanduser("~/.zmqanalyzer-config.json")
 CONFIG_PUBLISHER_PORT_KEY = "publisher_port"
 CONFIG_SUBSCRIBER_TOPICS_KEY = "subscriber_topics"
 CONFIG_SUBSCRIBER_ADDRESS_KEY = "subscriber_address"
@@ -33,8 +28,9 @@ class Config:
             try:
                 with open(CONFIG_FILE, "r") as f:
                     Config._config = json.load(f)
+                print(f"Config loaded from {CONFIG_FILE}")
             except Exception as e:
-                logger.error(f"Failed to load config: {e}")
+                print(f"Failed to load config: {e}")
                 Config._config = {}
         else:
             Config._config = {}
@@ -45,7 +41,7 @@ class Config:
             with open(CONFIG_FILE, "w") as f:
                 json.dump(Config._config, f, indent=4)
         except Exception as e:
-            logger.error(f"Failed to save config: {e}")
+            print(f"Failed to save config: {e}")
 
     @staticmethod
     def get(key, default=None):
@@ -87,35 +83,60 @@ class Publisher:
             cls._instance.context = zmq.Context()
             cls._instance.socket = None
             cls._instance.port = ""
+            cls._instance.is_bound = False
             cls._instance.lock = threading.Lock()
         return cls._instance
 
-    def connect(self, port):
+    def bind(self, port):
+        """Bind the publisher socket to the specified port."""
         with self.lock:
-            if self.port == port and self.socket:
-                return
-
-            if self.socket:
-                self.socket.close()
-
-            self.port = port
-            self.socket = self.context.socket(zmq.PUB)
+            if self.is_bound:
+                return False, "Publisher already bound"
+            
             try:
+                self.socket = self.context.socket(zmq.PUB)
                 self.socket.bind(f"tcp://*:{port}")
-                logger.info(f"Publisher bound to port {port}")
+                self.port = port
+                self.is_bound = True
+                print(f"Publisher bound to port {port}")
+                return True, f"Publisher bound to port {port}"
             except zmq.ZMQError as e:
-                logger.error(f"Publisher bind error: {e}")
-                self.socket = None
+                print(f"Publisher bind error: {e}")
+                if self.socket:
+                    self.socket.close()
+                    self.socket = None
+                return False, f"Bind error: {e}"
 
-    def queue_message(self, port, topic, message):
-        self.connect(port)
+    def unbind(self):
+        """Unbind the publisher socket."""
         with self.lock:
-            if self.socket:
-                try:
-                    self.socket.send_multipart([topic.encode("utf-8"), message.encode("utf-8")])
-                    logger.info(f"Published to {topic}: {message}")
-                except zmq.ZMQError as e:
-                    logger.error(f"Publish error: {e}")
+            if not self.is_bound:
+                return False, "Publisher not bound"
+            
+            try:
+                if self.socket:
+                    self.socket.close()
+                    self.socket = None
+                self.is_bound = False
+                print(f"Publisher unbound from port {self.port}")
+                return True, f"Publisher unbound from port {self.port}"
+            except Exception as e:
+                print(f"Publisher unbind error: {e}")
+                return False, f"Unbind error: {e}"
+
+    def send_message(self, topic, message):
+        """Send a message on the specified topic."""
+        with self.lock:
+            if not self.is_bound or not self.socket:
+                return False, "Publisher not bound"
+            
+            try:
+                self.socket.send_multipart([topic.encode("utf-8"), message.encode("utf-8")])
+                print(f"Published to {topic}: {message}")
+                return True, "Message published"
+            except zmq.ZMQError as e:
+                print(f"Publish error: {e}")
+                return False, f"Publish error: {e}"
 
 
 class Subscriber:
@@ -134,10 +155,11 @@ class Subscriber:
         return cls._instance
 
     def start(self, topics, address):
+        """Start subscribing to topics at the specified address."""
         self.stop()
 
-        self.socket = self.context.socket(zmq.SUB)
         try:
+            self.socket = self.context.socket(zmq.SUB)
             self.socket.connect(address)
             for topic in topics:
                 self.socket.setsockopt_string(zmq.SUBSCRIBE, topic)
@@ -145,9 +167,14 @@ class Subscriber:
             self.running = True
             self.thread = threading.Thread(target=self._receive_loop, daemon=True)
             self.thread.start()
-            logger.info(f"Subscriber started on {address} for topics {topics}")
+            print(f"Subscriber started on {address} for topics {topics}")
+            return True, f"Subscribed to {len(topics)} topic(s)"
         except zmq.ZMQError as e:
-            logger.error(f"Subscriber connect error: {e}")
+            print(f"Subscriber connect error: {e}")
+            if self.socket:
+                self.socket.close()
+                self.socket = None
+            return False, f"Connection error: {e}"
 
     def stop(self):
         self.running = False
@@ -183,7 +210,7 @@ class Subscriber:
             except zmq.ZMQError:
                 break
             except Exception as e:
-                logger.error(f"Subscriber loop error: {e}")
+                print(f"Subscriber loop error: {e}")
 
     def get_latest_message(self, topic):
         with self.lock:
@@ -244,6 +271,8 @@ class Replyer:
             cls._instance.context = zmq.Context()
             cls._instance.socket = None
             cls._instance.running = False
+            cls._instance.is_bound = False
+            cls._instance.address = ""
             cls._instance.thread = None
             cls._instance.callback = None
             cls._instance.pending_reply = None
@@ -253,26 +282,50 @@ class Replyer:
     def set_callback(self, callback):
         self.callback = callback
 
-    def start(self, address):
-        self.stop()
-        self.socket = self.context.socket(zmq.REP)
+    def bind(self, address):
+        """Bind the replyer socket to the specified address."""
+        if self.is_bound:
+            return False, "Replyer already bound"
+        
         try:
+            self.socket = self.context.socket(zmq.REP)
             self.socket.bind(address)
+            self.address = address
             self.running = True
+            self.is_bound = True
             self.thread = threading.Thread(target=self._receive_loop, daemon=True)
             self.thread.start()
-            logger.info(f"Replyer bound to {address}")
+            print(f"Replyer bound to {address}")
+            return True, f"Replyer bound to {address}"
         except zmq.ZMQError as e:
-            logger.error(f"Replyer bind error: {e}")
+            print(f"Replyer bind error: {e}")
+            if self.socket:
+                self.socket.close()
+                self.socket = None
+            return False, f"Bind error: {e}"
 
-    def stop(self):
+    def unbind(self):
+        """Unbind the replyer socket."""
+        if not self.is_bound:
+            return False, "Replyer not bound"
+        
         self.running = False
+        self.is_bound = False
+        self.reply_event.set()  # Wake up any waiting thread
+        
         if self.socket:
-            self.socket.close()  # This might raise in the thread
+            try:
+                self.socket.close()
+            except:
+                pass
             self.socket = None
+        
         if self.thread:
-            self.thread.join(timeout=0.5)
+            self.thread.join(timeout=1.0)
             self.thread = None
+        
+        print(f"Replyer unbound from {self.address}")
+        return True, f"Replyer unbound from {self.address}"
 
     def send_reply(self, message):
         self.pending_reply = message
@@ -299,7 +352,7 @@ class Replyer:
             except zmq.ZMQError:
                 break
             except Exception as e:
-                logger.error(f"Replyer loop error: {e}")
+                print(f"Replyer loop error: {e}")
 
 
 # --- UI Classes ---
@@ -400,14 +453,20 @@ class BaseComPanel(wx.Panel):
             Config.add_to_list(self.recent_msgs_key, message)
 
     def recv_message(self, message):
+        """Display received message with JSON formatting if applicable."""
         try:
             # Try to format JSON
             if isinstance(message, str):
                 parsed = json.loads(message)
                 self.recv_txt.SetValue(json.dumps(parsed, indent=2))
+            elif isinstance(message, dict):
+                self.recv_txt.SetValue(json.dumps(message, indent=2))
             else:
                 self.recv_txt.SetValue(str(message))
-        except:
+        except json.JSONDecodeError:
+            self.recv_txt.SetValue(str(message))
+        except Exception as e:
+            print(f"Error displaying message: {e}")
             self.recv_txt.SetValue(str(message))
 
     def get_connection_address(self):
@@ -469,24 +528,48 @@ class ReplyerPanel(BaseComPanel):
         default_addr = Config.get(CONFIG_REPLYER_ADDRESS_KEY, "tcp://*:5555")
         super().__init__(parent, default_addr, CONFIG_RECENT_SENT_MSGS_REP_KEY, self.send_reply)
 
-        # Add Start/Stop buttons for Replyer
-        self.start_btn = wx.Button(self, label="Start Replyer")
-        self.stop_btn = wx.Button(self, label="Stop Replyer")
-        self.ctrl_sizer.Insert(0, self.start_btn, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
-        self.ctrl_sizer.Insert(1, self.stop_btn, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
+        # Add Bind/Unbind buttons for Replyer
+        self.bind_btn = wx.Button(self, label="Bind")
+        self.unbind_btn = wx.Button(self, label="Unbind")
+        self.unbind_btn.Enable(False)
+        self.ctrl_sizer.Insert(0, self.bind_btn, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
+        self.ctrl_sizer.Insert(1, self.unbind_btn, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
 
-        self.start_btn.Bind(wx.EVT_BUTTON, self.on_start)
-        self.stop_btn.Bind(wx.EVT_BUTTON, self.on_stop)
+        self.bind_btn.Bind(wx.EVT_BUTTON, self.on_bind)
+        self.unbind_btn.Bind(wx.EVT_BUTTON, self.on_unbind)
+        
+        # Disable send button until bound
+        self.send_btn.Enable(False)
 
         Replyer().set_callback(self.on_request_received)
 
-    def on_start(self, event):
-        addr = self.get_connection_address()
+    def on_bind(self, event):
+        addr = self.get_connection_address().strip()
+        if not addr:
+            wx.MessageBox("Please enter a connection address", "Input Error", wx.OK | wx.ICON_WARNING)
+            return
+        
         Config.set(CONFIG_REPLYER_ADDRESS_KEY, addr)
-        Replyer().start(addr)
+        success, message = Replyer().bind(addr)
+        
+        if success:
+            self.bind_btn.Enable(False)
+            self.unbind_btn.Enable(True)
+            self.send_btn.Enable(True)
+            self.address_txt.Enable(False)
+            wx.MessageBox(message, "Success", wx.OK | wx.ICON_INFORMATION)
+        else:
+            wx.MessageBox(message, "Bind Error", wx.OK | wx.ICON_ERROR)
 
-    def on_stop(self, event):
-        Replyer().stop()
+    def on_unbind(self, event):
+        success, message = Replyer().unbind()
+        if success:
+            self.bind_btn.Enable(True)
+            self.unbind_btn.Enable(False)
+            self.send_btn.Enable(False)
+            self.address_txt.Enable(True)
+        else:
+            wx.MessageBox(message, "Unbind Error", wx.OK | wx.ICON_ERROR)
 
     def on_request_received(self, message):
         self.recv_message(message)
@@ -507,13 +590,19 @@ class PublisherPanel(wx.Panel):
         self.controls_sizer = wx.BoxSizer(wx.HORIZONTAL)
 
         self.port_lbl = wx.StaticText(self, label="Port:")
-        self.port_txt = wx.TextCtrl(self, value=Config.get(CONFIG_PUBLISHER_PORT_KEY, "5556"), size=(60, -1))
+        self.port_txt = wx.TextCtrl(self, value=Config.get(CONFIG_PUBLISHER_PORT_KEY, "5556"), size=(80, -1))
 
         self.topic_lbl = wx.StaticText(self, label="Topic:")
         self.topic_txt = wx.TextCtrl(self, value="test", size=(100, -1))
 
+        self.bind_btn = wx.Button(self, label="Bind")
+        self.unbind_btn = wx.Button(self, label="Unbind")
+        self.unbind_btn.Enable(False)
+
         self.controls_sizer.Add(self.port_lbl, 0, wx.CENTER | wx.ALL, 5)
         self.controls_sizer.Add(self.port_txt, 0, wx.CENTER | wx.ALL, 5)
+        self.controls_sizer.Add(self.bind_btn, 0, wx.CENTER | wx.ALL, 5)
+        self.controls_sizer.Add(self.unbind_btn, 0, wx.CENTER | wx.ALL, 5)
         self.controls_sizer.Add(self.topic_lbl, 0, wx.CENTER | wx.ALL, 5)
         self.controls_sizer.Add(self.topic_txt, 0, wx.CENTER | wx.ALL, 5)
 
@@ -530,6 +619,7 @@ class PublisherPanel(wx.Panel):
 
         # Publish Button
         self.pub_btn = wx.Button(self, label="Publish Message")
+        self.pub_btn.Enable(False)
 
         self.main_sizer.Add(self.controls_sizer, 0, wx.EXPAND | wx.ALL, 5)
         self.main_sizer.Add(self.msg_sizer, 0, wx.EXPAND | wx.ALL, 5)
@@ -538,10 +628,44 @@ class PublisherPanel(wx.Panel):
 
         self.SetSizer(self.main_sizer)
 
+        self.bind_btn.Bind(wx.EVT_BUTTON, self.on_bind)
+        self.unbind_btn.Bind(wx.EVT_BUTTON, self.on_unbind)
         self.pub_btn.Bind(wx.EVT_BUTTON, self.on_publish)
         self.recent_list.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_recent_selected)
+        self.recent_list.Bind(wx.EVT_LIST_ITEM_RIGHT_CLICK, self.on_recent_right_click)
 
         self.load_recent()
+
+    def on_bind(self, event):
+        port = self.port_txt.GetValue().strip()
+        if not port:
+            wx.MessageBox("Please enter a port number", "Input Error", wx.OK | wx.ICON_WARNING)
+            return
+        
+        if not port.isdigit():
+            wx.MessageBox("Port must be a number", "Input Error", wx.OK | wx.ICON_WARNING)
+            return
+        
+        success, message = Publisher().bind(port)
+        if success:
+            Config.set(CONFIG_PUBLISHER_PORT_KEY, port)
+            self.bind_btn.Enable(False)
+            self.unbind_btn.Enable(True)
+            self.pub_btn.Enable(True)
+            self.port_txt.Enable(False)
+            wx.MessageBox(message, "Success", wx.OK | wx.ICON_INFORMATION)
+        else:
+            wx.MessageBox(message, "Bind Error", wx.OK | wx.ICON_ERROR)
+
+    def on_unbind(self, event):
+        success, message = Publisher().unbind()
+        if success:
+            self.bind_btn.Enable(True)
+            self.unbind_btn.Enable(False)
+            self.pub_btn.Enable(False)
+            self.port_txt.Enable(True)
+        else:
+            wx.MessageBox(message, "Unbind Error", wx.OK | wx.ICON_ERROR)
 
     def load_recent(self):
         msgs = Config.get_list(CONFIG_RECENT_SENT_MSGS_PUB_KEY)
@@ -549,12 +673,17 @@ class PublisherPanel(wx.Panel):
             self.recent_list.InsertItem(0, msg)
 
     def on_publish(self, event):
-        port = self.port_txt.GetValue()
-        topic = self.topic_txt.GetValue()
+        topic = self.topic_txt.GetValue().strip()
         message = self.msg_txt.GetValue()
 
-        Config.set(CONFIG_PUBLISHER_PORT_KEY, port)
-        Publisher().queue_message(port, topic, message)
+        if not topic:
+            wx.MessageBox("Please enter a topic", "Input Error", wx.OK | wx.ICON_WARNING)
+            return
+
+        success, msg = Publisher().send_message(topic, message)
+        if not success:
+            wx.MessageBox(msg, "Publish Error", wx.OK | wx.ICON_ERROR)
+            return
 
         # Add to recent
         found = False
@@ -570,6 +699,39 @@ class PublisherPanel(wx.Panel):
         item = event.GetIndex()
         if item != -1:
             self.msg_txt.SetValue(self.recent_list.GetItemText(item))
+
+    def on_recent_right_click(self, event):
+        menu = wx.Menu()
+        use_item = menu.Append(wx.ID_ANY, "Use Message")
+        copy_item = menu.Append(wx.ID_COPY, "Copy Message")
+        del_item = menu.Append(wx.ID_DELETE, "Delete Message")
+
+        self.Bind(wx.EVT_MENU, self.on_use_context, use_item)
+        self.Bind(wx.EVT_MENU, self.on_copy_context, copy_item)
+        self.Bind(wx.EVT_MENU, self.on_delete_context, del_item)
+
+        self.PopupMenu(menu)
+        menu.Destroy()
+
+    def on_use_context(self, event):
+        item = self.recent_list.GetNextItem(-1, wx.LIST_NEXT_ALL, wx.LIST_STATE_SELECTED)
+        if item != -1:
+            self.msg_txt.SetValue(self.recent_list.GetItemText(item))
+
+    def on_copy_context(self, event):
+        item = self.recent_list.GetNextItem(-1, wx.LIST_NEXT_ALL, wx.LIST_STATE_SELECTED)
+        if item != -1:
+            text = self.recent_list.GetItemText(item)
+            if wx.TheClipboard.Open():
+                wx.TheClipboard.SetData(wx.TextDataObject(text))
+                wx.TheClipboard.Close()
+
+    def on_delete_context(self, event):
+        item = self.recent_list.GetNextItem(-1, wx.LIST_NEXT_ALL, wx.LIST_STATE_SELECTED)
+        if item != -1:
+            msg = self.recent_list.GetItemText(item)
+            self.recent_list.DeleteItem(item)
+            Config.remove_from_list(CONFIG_RECENT_SENT_MSGS_PUB_KEY, msg)
 
 
 class TopicFrame(wx.Frame):
@@ -639,14 +801,27 @@ class SubscriberPanel(wx.Panel):
         Subscriber().set_callback(self.on_message_received)
 
     def on_start(self, event):
-        addr = self.addr_txt.GetValue()
-        topics_str = self.topic_txt.GetValue()
+        addr = self.addr_txt.GetValue().strip()
+        topics_str = self.topic_txt.GetValue().strip()
+        
+        if not addr:
+            wx.MessageBox("Please enter an address", "Input Error", wx.OK | wx.ICON_WARNING)
+            return
+        
+        if not topics_str:
+            wx.MessageBox("Please enter at least one topic", "Input Error", wx.OK | wx.ICON_WARNING)
+            return
+        
         topics = [t.strip() for t in topics_str.split(",") if t.strip()]
 
         Config.set(CONFIG_SUBSCRIBER_ADDRESS_KEY, addr)
         Config.set(CONFIG_SUBSCRIBER_TOPICS_KEY, topics_str)
 
-        Subscriber().start(topics, addr)
+        success, message = Subscriber().start(topics, addr)
+        if success:
+            wx.MessageBox(message, "Success", wx.OK | wx.ICON_INFORMATION)
+        else:
+            wx.MessageBox(message, "Connection Error", wx.OK | wx.ICON_ERROR)
 
     def on_stop(self, event):
         Subscriber().stop()
@@ -692,15 +867,15 @@ class MainFrame(wx.Frame):
 
         self.notebook = wx.Notebook(self)
 
+        self.publisher_panel = PublisherPanel(self.notebook)
         self.subscriber_panel = SubscriberPanel(self.notebook)
         self.requester_panel = RequesterPanel(self.notebook)
         self.replyer_panel = ReplyerPanel(self.notebook)
-        self.publisher_panel = PublisherPanel(self.notebook)
 
+        self.notebook.AddPage(self.publisher_panel, "Publisher")
         self.notebook.AddPage(self.subscriber_panel, "Subscriber")
         self.notebook.AddPage(self.requester_panel, "Requester")
         self.notebook.AddPage(self.replyer_panel, "Replyer")
-        self.notebook.AddPage(self.publisher_panel, "Publisher")
 
         # Menu
         menubar = wx.MenuBar()
@@ -716,8 +891,11 @@ class MainFrame(wx.Frame):
         self.Close()
 
     def on_close(self, event):
+        # Clean shutdown of all sockets
+        print("Shutting down ZmqAnalyzer...")
         Subscriber().stop()
-        Replyer().stop()
+        Publisher().unbind()
+        Replyer().unbind()
         event.Skip()
 
 

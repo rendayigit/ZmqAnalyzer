@@ -2,8 +2,6 @@
 
 Postman for ZeroMQ.
 
-This project has been migrated to Python for easier usage and portability.
-
 ## Requirements
 
 - Python 3.x
@@ -24,10 +22,4 @@ Run the application:
 
 ```bash
 python zmq_analyzer.py
-```
-
-Or use the provided script:
-
-```bash
-./scripts/run.sh
 ```
