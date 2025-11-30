@@ -376,15 +376,15 @@ class BaseComPanel(wx.Panel):
 
         # Create horizontal splitter for Send/Recv
         self.h_splitter = wx.SplitterWindow(self, style=wx.SP_LIVE_UPDATE)
-        
+
         # Send Side Panel
         self.send_panel = wx.Panel(self.h_splitter)
         self.send_sizer = wx.BoxSizer(wx.VERTICAL)
         self.send_lbl = wx.StaticText(self.send_panel, label="Send:")
-        
+
         # Vertical splitter for message and recent list
         self.v_splitter = wx.SplitterWindow(self.send_panel, style=wx.SP_LIVE_UPDATE)
-        
+
         # Message panel (in vertical splitter)
         self.msg_panel = wx.Panel(self.v_splitter)
         self.msg_panel_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -395,7 +395,7 @@ class BaseComPanel(wx.Panel):
         )
         self.msg_panel_sizer.Add(self.send_txt, 1, wx.EXPAND)
         self.msg_panel.SetSizer(self.msg_panel_sizer)
-        
+
         # Recent panel (in vertical splitter)
         self.recent_panel = wx.Panel(self.v_splitter)
         self.recent_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -403,11 +403,11 @@ class BaseComPanel(wx.Panel):
         self.recent_list.InsertColumn(0, "Recently Sent Messages", width=450)
         self.recent_sizer.Add(self.recent_list, 1, wx.EXPAND)
         self.recent_panel.SetSizer(self.recent_sizer)
-        
+
         self.v_splitter.SplitHorizontally(self.msg_panel, self.recent_panel)
         self.v_splitter.SetSashGravity(0.5)
         self.v_splitter.SetMinimumPaneSize(80)
-        
+
         self.send_sizer.Add(self.send_lbl, 0, wx.EXPAND | wx.ALL, 5)
         self.send_sizer.Add(self.v_splitter, 1, wx.EXPAND | wx.ALL, 5)
         self.send_panel.SetSizer(self.send_sizer)
@@ -424,7 +424,7 @@ class BaseComPanel(wx.Panel):
         self.recv_sizer.Add(self.recv_lbl, 0, wx.EXPAND | wx.ALL, 5)
         self.recv_sizer.Add(self.recv_txt, 1, wx.EXPAND | wx.ALL, 5)
         self.recv_panel.SetSizer(self.recv_sizer)
-        
+
         # Setup horizontal splitter
         self.h_splitter.SplitVertically(self.send_panel, self.recv_panel)
         self.h_splitter.SetSashGravity(0.5)
@@ -447,7 +447,7 @@ class BaseComPanel(wx.Panel):
         self.recent_list.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_recent_selected)
         self.recent_list.Bind(wx.EVT_LIST_ITEM_RIGHT_CLICK, self.on_recent_right_click)
         self.Bind(wx.EVT_SIZE, self.on_size)
-        
+
         self._splitters_initialized = False
 
         # Load Config
@@ -476,7 +476,7 @@ class BaseComPanel(wx.Panel):
 
     def on_send_message(self, event):
         message = self.send_txt.GetValue()
-        
+
         # Try to format as JSON if valid
         try:
             parsed = json.loads(message)
@@ -485,7 +485,7 @@ class BaseComPanel(wx.Panel):
             message = formatted
         except json.JSONDecodeError:
             pass  # Not valid JSON, use as-is
-        
+
         if self.send_callback:
             self.send_callback(message)
 
@@ -574,35 +574,35 @@ class RequesterPanel(BaseComPanel):
 class ReplyerPanel(wx.Panel):
     def __init__(self, parent):
         super().__init__(parent)
-        
+
         # Extract port from config (remove tcp://*: prefix if present)
         default_addr = Config.get(CONFIG_REPLYER_ADDRESS_KEY, "tcp://*:5555")
         default_port = default_addr.replace("tcp://*:", "")
-        
+
         self.main_sizer = wx.BoxSizer(wx.VERTICAL)
         self.is_bound = False
-        
+
         # Top Sizer (Port and Bind button)
         self.top_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.port_lbl = wx.StaticText(self, label="Port:")
         self.port_txt = wx.TextCtrl(self, value=default_port, size=(80, -1))
         self.bind_toggle_btn = wx.Button(self, label="Bind")
-        
+
         self.top_sizer.Add(self.port_lbl, 0, wx.CENTER | wx.ALL, 5)
         self.top_sizer.Add(self.port_txt, 0, wx.CENTER | wx.ALL, 5)
         self.top_sizer.Add(self.bind_toggle_btn, 0, wx.CENTER | wx.ALL, 5)
-        
+
         # Create horizontal splitter for Send/Recv
         self.h_splitter = wx.SplitterWindow(self, style=wx.SP_LIVE_UPDATE)
-        
+
         # Send Side Panel
         self.send_panel = wx.Panel(self.h_splitter)
         self.send_sizer = wx.BoxSizer(wx.VERTICAL)
         self.send_lbl = wx.StaticText(self.send_panel, label="Send:")
-        
+
         # Vertical splitter for message and recent list
         self.v_splitter = wx.SplitterWindow(self.send_panel, style=wx.SP_LIVE_UPDATE)
-        
+
         # Message panel (in vertical splitter)
         self.msg_panel = wx.Panel(self.v_splitter)
         self.msg_panel_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -613,7 +613,7 @@ class ReplyerPanel(wx.Panel):
         )
         self.msg_panel_sizer.Add(self.send_txt, 1, wx.EXPAND)
         self.msg_panel.SetSizer(self.msg_panel_sizer)
-        
+
         # Recent panel (in vertical splitter)
         self.recent_panel = wx.Panel(self.v_splitter)
         self.recent_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -621,15 +621,15 @@ class ReplyerPanel(wx.Panel):
         self.recent_list.InsertColumn(0, "Recently Sent Messages", width=450)
         self.recent_sizer.Add(self.recent_list, 1, wx.EXPAND)
         self.recent_panel.SetSizer(self.recent_sizer)
-        
+
         self.v_splitter.SplitHorizontally(self.msg_panel, self.recent_panel)
         self.v_splitter.SetSashGravity(0.5)
         self.v_splitter.SetMinimumPaneSize(80)
-        
+
         self.send_sizer.Add(self.send_lbl, 0, wx.EXPAND | wx.ALL, 5)
         self.send_sizer.Add(self.v_splitter, 1, wx.EXPAND | wx.ALL, 5)
         self.send_panel.SetSizer(self.send_sizer)
-        
+
         # Recv Side Panel
         self.recv_panel = wx.Panel(self.h_splitter)
         self.recv_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -642,37 +642,37 @@ class ReplyerPanel(wx.Panel):
         self.recv_sizer.Add(self.recv_lbl, 0, wx.EXPAND | wx.ALL, 5)
         self.recv_sizer.Add(self.recv_txt, 1, wx.EXPAND | wx.ALL, 5)
         self.recv_panel.SetSizer(self.recv_sizer)
-        
+
         # Setup horizontal splitter
         self.h_splitter.SplitVertically(self.send_panel, self.recv_panel)
         self.h_splitter.SetSashGravity(0.5)
         self.h_splitter.SetMinimumPaneSize(200)
-        
+
         # Control Sizer
         self.ctrl_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.send_btn = wx.Button(self, label="Send Message")
         self.send_btn.Enable(False)  # Disable until bound
         self.ctrl_sizer.AddStretchSpacer(1)
         self.ctrl_sizer.Add(self.send_btn, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
-        
+
         self.main_sizer.Add(self.top_sizer, 0, wx.EXPAND | wx.ALL, 5)
         self.main_sizer.Add(self.h_splitter, 1, wx.EXPAND | wx.ALL, 5)
         self.main_sizer.Add(self.ctrl_sizer, 0, wx.EXPAND | wx.ALL, 5)
-        
+
         self.SetSizer(self.main_sizer)
-        
+
         # Bindings
         self.bind_toggle_btn.Bind(wx.EVT_BUTTON, self.on_bind_toggle)
         self.send_btn.Bind(wx.EVT_BUTTON, self.on_send_message)
         self.recent_list.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_recent_selected)
         self.recent_list.Bind(wx.EVT_LIST_ITEM_RIGHT_CLICK, self.on_recent_right_click)
         self.Bind(wx.EVT_SIZE, self.on_size)
-        
+
         self._splitters_initialized = False
-        
+
         # Load recent messages
         self.load_recent_messages()
-        
+
         Replyer().set_callback(self.on_request_received)
 
     def on_size(self, event):
@@ -690,12 +690,12 @@ class ReplyerPanel(wx.Panel):
         v_size = self.v_splitter.GetSize().GetHeight()
         if v_size > 0:
             self.v_splitter.SetSashPosition(v_size // 2)
-    
+
     def load_recent_messages(self):
         msgs = Config.get_list(CONFIG_RECENT_SENT_MSGS_REP_KEY)
         for msg in msgs:
             self.recent_list.InsertItem(0, msg)
-    
+
     def on_bind_toggle(self, event):
         if self.is_bound:
             # Unbind
@@ -713,15 +713,15 @@ class ReplyerPanel(wx.Panel):
             if not port:
                 wx.MessageBox("Please enter a port number", "Input Error", wx.OK | wx.ICON_WARNING)
                 return
-            
+
             if not port.isdigit():
                 wx.MessageBox("Port must be a number", "Input Error", wx.OK | wx.ICON_WARNING)
                 return
-            
+
             addr = f"tcp://*:{port}"
             Config.set(CONFIG_REPLYER_ADDRESS_KEY, addr)
             success, message = Replyer().bind(addr)
-            
+
             if success:
                 self.is_bound = True
                 self.bind_toggle_btn.SetLabel("Unbind")
@@ -729,10 +729,10 @@ class ReplyerPanel(wx.Panel):
                 self.port_txt.Enable(False)
             else:
                 wx.MessageBox(message, "Bind Error", wx.OK | wx.ICON_ERROR)
-    
+
     def on_send_message(self, event):
         message = self.send_txt.GetValue()
-        
+
         # Try to format as JSON if valid
         try:
             parsed = json.loads(message)
@@ -741,20 +741,20 @@ class ReplyerPanel(wx.Panel):
             message = formatted
         except json.JSONDecodeError:
             pass  # Not valid JSON, use as-is
-        
+
         self.send_reply(message)
-        
+
         # Add to recent
         found = False
         for i in range(self.recent_list.GetItemCount()):
             if self.recent_list.GetItemText(i) == message:
                 found = True
                 break
-        
+
         if not found:
             self.recent_list.InsertItem(0, message)
             Config.add_to_list(CONFIG_RECENT_SENT_MSGS_REP_KEY, message)
-    
+
     def recv_message(self, message):
         """Display received message with JSON formatting if applicable."""
         try:
@@ -771,30 +771,30 @@ class ReplyerPanel(wx.Panel):
         except Exception as e:
             print(f"Error displaying message: {e}")
             self.recv_txt.SetValue(str(message))
-    
+
     def on_recent_selected(self, event):
         item = event.GetIndex()
         if item != -1:
             self.send_txt.SetValue(self.recent_list.GetItemText(item))
-    
+
     def on_recent_right_click(self, event):
         menu = wx.Menu()
         use_item = menu.Append(wx.ID_ANY, "Use Message")
         copy_item = menu.Append(wx.ID_COPY, "Copy Message")
         del_item = menu.Append(wx.ID_DELETE, "Delete Message")
-        
+
         self.Bind(wx.EVT_MENU, self.on_use_context, use_item)
         self.Bind(wx.EVT_MENU, self.on_copy_context, copy_item)
         self.Bind(wx.EVT_MENU, self.on_delete_context, del_item)
-        
+
         self.PopupMenu(menu)
         menu.Destroy()
-    
+
     def on_use_context(self, event):
         item = self.recent_list.GetNextItem(-1, wx.LIST_NEXT_ALL, wx.LIST_STATE_SELECTED)
         if item != -1:
             self.send_txt.SetValue(self.recent_list.GetItemText(item))
-    
+
     def on_copy_context(self, event):
         item = self.recent_list.GetNextItem(-1, wx.LIST_NEXT_ALL, wx.LIST_STATE_SELECTED)
         if item != -1:
@@ -802,7 +802,7 @@ class ReplyerPanel(wx.Panel):
             if wx.TheClipboard.Open():
                 wx.TheClipboard.SetData(wx.TextDataObject(text))
                 wx.TheClipboard.Close()
-    
+
     def on_delete_context(self, event):
         item = self.recent_list.GetNextItem(-1, wx.LIST_NEXT_ALL, wx.LIST_STATE_SELECTED)
         if item != -1:
@@ -845,7 +845,7 @@ class PublisherPanel(wx.Panel):
 
         # Create splitter for message area and recent list
         self.splitter = wx.SplitterWindow(self, style=wx.SP_LIVE_UPDATE)
-        
+
         # Message Area Panel
         self.msg_panel = wx.Panel(self.splitter)
         self.msg_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -862,7 +862,7 @@ class PublisherPanel(wx.Panel):
         self.recent_list.InsertColumn(0, "Recently Published Messages", width=500)
         self.recent_sizer.Add(self.recent_list, 1, wx.EXPAND)
         self.recent_panel.SetSizer(self.recent_sizer)
-        
+
         # Setup splitter
         self.splitter.SplitHorizontally(self.msg_panel, self.recent_panel)
         self.splitter.SetSashGravity(0.5)
@@ -883,7 +883,7 @@ class PublisherPanel(wx.Panel):
         self.recent_list.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_recent_selected)
         self.recent_list.Bind(wx.EVT_LIST_ITEM_RIGHT_CLICK, self.on_recent_right_click)
         self.Bind(wx.EVT_SIZE, self.on_size)
-        
+
         self._splitter_initialized = False
 
         self.load_recent()
@@ -1014,7 +1014,7 @@ class PublisherPanel(wx.Panel):
 class TopicFrame(wx.Frame):
     # Maximum message size to display (100KB)
     MAX_DISPLAY_SIZE = 100 * 1024
-    
+
     def __init__(self, parent, topic):
         super().__init__(parent, title=f"Topic: {topic}", size=(400, 300))
         self.topic = topic
@@ -1024,12 +1024,12 @@ class TopicFrame(wx.Frame):
         self.sizer.Add(self.text, 1, wx.EXPAND | wx.ALL, 5)
         self.panel.SetSizer(self.sizer)
         self.Bind(wx.EVT_CLOSE, self.on_close)
-        
+
         # Throttle updates to avoid UI freezing
         self.pending_message = None
         self.update_timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self.on_update_timer, self.update_timer)
-        
+
         self.Show()
 
     def update_message(self, message):
@@ -1038,15 +1038,15 @@ class TopicFrame(wx.Frame):
         # Only start timer if not already running
         if not self.update_timer.IsRunning():
             self.update_timer.StartOnce(50)  # 50ms delay, updates max 20 times/sec
-    
+
     def on_update_timer(self, event):
         """Actually update the display with the pending message."""
         if self.pending_message is None:
             return
-        
+
         message = self.pending_message
         self.pending_message = None
-        
+
         try:
             if isinstance(message, dict):
                 display_text = json.dumps(message, indent=2)
@@ -1059,11 +1059,11 @@ class TopicFrame(wx.Frame):
                     display_text = message
             else:
                 display_text = str(message)
-            
+
             # Truncate if too large to prevent UI freeze
             if len(display_text) > self.MAX_DISPLAY_SIZE:
-                display_text = display_text[:self.MAX_DISPLAY_SIZE] + f"\n\n... [Truncated - message is {len(display_text)} bytes]"
-            
+                display_text = display_text[: self.MAX_DISPLAY_SIZE] + f"\n\n... [Truncated - message is {len(display_text)} bytes]"
+
             self.text.SetValue(display_text)
         except Exception as e:
             self.text.SetValue(f"Error displaying message: {e}")
@@ -1079,7 +1079,7 @@ class SubscriberPanel(wx.Panel):
         super().__init__(parent)
         self.topic_frames = {}
         self.is_running = False
-        
+
         # Statistics tracking
         self.topic_stats = {}  # {topic: {"count": int, "bytes": int, "first_time": float, "last_time": float}}
         self.start_time = None
@@ -1107,7 +1107,7 @@ class SubscriberPanel(wx.Panel):
 
         # Create a splitter for messages and statistics
         self.splitter = wx.SplitterWindow(self, style=wx.SP_LIVE_UPDATE)
-        
+
         # Message List Panel
         self.msg_panel = wx.Panel(self.splitter)
         self.msg_panel_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -1116,37 +1116,69 @@ class SubscriberPanel(wx.Panel):
         self.msg_list.AppendTextColumn("Message", width=400)
         self.msg_panel_sizer.Add(self.msg_list, 1, wx.EXPAND)
         self.msg_panel.SetSizer(self.msg_panel_sizer)
-        
+
         # Statistics Panel
         self.stats_panel = wx.Panel(self.splitter)
         self.stats_sizer = wx.BoxSizer(wx.VERTICAL)
-        
-        # Stats header
+
+        # Stats header with reset button
+        stats_header_sizer = wx.BoxSizer(wx.HORIZONTAL)
         stats_header = wx.StaticText(self.stats_panel, label="Statistics")
         stats_header.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
-        self.stats_sizer.Add(stats_header, 0, wx.ALL, 5)
-        
-        # Stats controls
-        stats_ctrl_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        stats_header_sizer.Add(stats_header, 0, wx.CENTER | wx.ALL, 5)
+        stats_header_sizer.AddStretchSpacer(1)
         self.reset_stats_btn = wx.Button(self.stats_panel, label="Reset Stats")
-        stats_ctrl_sizer.Add(self.reset_stats_btn, 0, wx.ALL, 2)
-        self.stats_sizer.Add(stats_ctrl_sizer, 0, wx.EXPAND | wx.ALL, 2)
-        
-        # Summary stats
-        self.summary_txt = wx.StaticText(self.stats_panel, label="Total: 0 messages | 0 bytes | 0 topics")
-        self.stats_sizer.Add(self.summary_txt, 0, wx.EXPAND | wx.ALL, 5)
-        
+        stats_header_sizer.Add(self.reset_stats_btn, 0, wx.ALL, 2)
+        self.stats_sizer.Add(stats_header_sizer, 0, wx.EXPAND | wx.ALL, 2)
+
+        # Totals section title
+        totals_title = wx.StaticText(self.stats_panel, label="Totals")
+        totals_title.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+        self.stats_sizer.Add(totals_title, 0, wx.LEFT | wx.TOP, 5)
+
+        # Summary stats grid
+        summary_grid = wx.FlexGridSizer(2, 5, 5, 20)  # 2 rows, 5 cols, vgap=5, hgap=20
+        # Make all columns growable with equal proportion
+        for i in range(5):
+            summary_grid.AddGrowableCol(i, 1)
+
+        # Row 1: Labels
+        for label in ["Messages", "Data Size", "Topics", "Rate", "Speed"]:
+            lbl = wx.StaticText(self.stats_panel, label=label)
+            lbl.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+            summary_grid.Add(lbl, 0, wx.ALIGN_CENTER)
+
+        # Row 2: Values
+        self.summary_msgs = wx.StaticText(self.stats_panel, label="0")
+        self.summary_bytes = wx.StaticText(self.stats_panel, label="0 bytes")
+        self.summary_topics = wx.StaticText(self.stats_panel, label="0")
+        self.summary_rate = wx.StaticText(self.stats_panel, label="-")
+        self.summary_speed = wx.StaticText(self.stats_panel, label="-")
+
+        summary_grid.Add(self.summary_msgs, 0, wx.ALIGN_CENTER)
+        summary_grid.Add(self.summary_bytes, 0, wx.ALIGN_CENTER)
+        summary_grid.Add(self.summary_topics, 0, wx.ALIGN_CENTER)
+        summary_grid.Add(self.summary_rate, 0, wx.ALIGN_CENTER)
+        summary_grid.Add(self.summary_speed, 0, wx.ALIGN_CENTER)
+
+        self.stats_sizer.Add(summary_grid, 0, wx.EXPAND | wx.ALL, 5)
+
+        # Per-Topic section title
+        per_topic_title = wx.StaticText(self.stats_panel, label="Per Topic")
+        per_topic_title.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+        self.stats_sizer.Add(per_topic_title, 0, wx.LEFT | wx.TOP | wx.BOTTOM, 5)
+
         # Stats list
         self.stats_list = wx.dataview.DataViewListCtrl(self.stats_panel)
-        self.stats_list.AppendTextColumn("Topic", width=100)
-        self.stats_list.AppendTextColumn("Count", width=60)
-        self.stats_list.AppendTextColumn("Bytes", width=80)
-        self.stats_list.AppendTextColumn("Rate (msg/s)", width=80)
-        self.stats_list.AppendTextColumn("Last Received", width=120)
+        self.stats_list.AppendTextColumn("Topic", width=150)
+        self.stats_list.AppendTextColumn("Count", width=100)
+        self.stats_list.AppendTextColumn("Bytes", width=120)
+        self.stats_list.AppendTextColumn("Rate (msg/s)", width=120)
+        self.stats_list.AppendTextColumn("Last Received", width=150)
         self.stats_sizer.Add(self.stats_list, 1, wx.EXPAND)
-        
+
         self.stats_panel.SetSizer(self.stats_sizer)
-        
+
         # Setup splitter
         self.splitter.SplitHorizontally(self.msg_panel, self.stats_panel)
         self.splitter.SetSashGravity(0.5)  # Messages get 50% of space
@@ -1162,7 +1194,7 @@ class SubscriberPanel(wx.Panel):
         self.msg_list.Bind(wx.dataview.EVT_DATAVIEW_ITEM_ACTIVATED, self.on_item_activated)
         self.msg_list.Bind(wx.dataview.EVT_DATAVIEW_ITEM_CONTEXT_MENU, self.on_msg_list_right_click)
         self.Bind(wx.EVT_SIZE, self.on_size)
-        
+
         self._splitter_initialized = False
 
         Subscriber().set_callback(self.on_message_received)
@@ -1178,6 +1210,8 @@ class SubscriberPanel(wx.Panel):
         size = self.splitter.GetSize().GetHeight()
         if size > 0:
             self.splitter.SetSashPosition(size // 2)
+        # Force stats panel to re-layout for proper grid alignment
+        self.stats_panel.Layout()
 
     def on_msg_list_right_click(self, event):
         """Show context menu for message list."""
@@ -1190,7 +1224,7 @@ class SubscriberPanel(wx.Panel):
     def on_clear_messages(self, event):
         """Clear all messages from the list."""
         self.msg_list.DeleteAllItems()
-    
+
     def on_reset_stats(self, event):
         """Reset all statistics."""
         self.topic_stats = {}
@@ -1231,15 +1265,17 @@ class SubscriberPanel(wx.Panel):
                 self.toggle_btn.SetLabel("Stop")
                 self.addr_txt.Enable(False)
                 self.topic_txt.Enable(False)
+                # Force layout to fix grid alignment
+                wx.CallAfter(self.stats_panel.Layout)
             else:
                 wx.MessageBox(message, "Connection Error", wx.OK | wx.ICON_ERROR)
-    
+
     def update_summary_stats(self):
-        """Update the summary statistics label."""
+        """Update the summary statistics labels."""
         total_msgs = sum(s["count"] for s in self.topic_stats.values())
         total_bytes = sum(s["bytes"] for s in self.topic_stats.values())
         total_topics = len(self.topic_stats)
-        
+
         # Format bytes nicely
         if total_bytes >= 1024 * 1024:
             bytes_str = f"{total_bytes / (1024 * 1024):.2f} MB"
@@ -1247,15 +1283,36 @@ class SubscriberPanel(wx.Panel):
             bytes_str = f"{total_bytes / 1024:.2f} KB"
         else:
             bytes_str = f"{total_bytes} bytes"
-        
-        self.summary_txt.SetLabel(f"Total: {total_msgs} messages | {bytes_str} | {total_topics} topics")
-    
+
+        # Calculate overall rate and speed
+        rate_str = "-"
+        speed_str = "-"
+        if self.start_time and self.topic_stats:
+            elapsed = time.time() - self.start_time
+            if elapsed > 0:
+                rate = total_msgs / elapsed
+                rate_str = f"{rate:.2f} msg/s"
+                speed = total_bytes / elapsed
+                if speed >= 1024 * 1024:
+                    speed_str = f"{speed / (1024 * 1024):.2f} MB/s"
+                elif speed >= 1024:
+                    speed_str = f"{speed / 1024:.2f} KB/s"
+                else:
+                    speed_str = f"{speed:.2f} B/s"
+
+        # Update individual labels
+        self.summary_msgs.SetLabel(str(total_msgs))
+        self.summary_bytes.SetLabel(bytes_str)
+        self.summary_topics.SetLabel(str(total_topics))
+        self.summary_rate.SetLabel(rate_str)
+        self.summary_speed.SetLabel(speed_str)
+
     def update_topic_stats_display(self, topic):
         """Update the statistics list for a specific topic."""
         stats = self.topic_stats.get(topic)
         if not stats:
             return
-        
+
         # Calculate rate
         elapsed = stats["last_time"] - stats["first_time"]
         if elapsed > 0:
@@ -1263,7 +1320,7 @@ class SubscriberPanel(wx.Panel):
             rate_str = f"{rate:.2f}"
         else:
             rate_str = "-"
-        
+
         # Format bytes
         if stats["bytes"] >= 1024 * 1024:
             bytes_str = f"{stats['bytes'] / (1024 * 1024):.2f} MB"
@@ -1271,10 +1328,10 @@ class SubscriberPanel(wx.Panel):
             bytes_str = f"{stats['bytes'] / 1024:.2f} KB"
         else:
             bytes_str = f"{stats['bytes']} B"
-        
+
         # Format last received time
         last_time = time.strftime("%H:%M:%S", time.localtime(stats["last_time"]))
-        
+
         # Find or add row
         found = False
         for i in range(self.stats_list.GetItemCount()):
@@ -1285,7 +1342,7 @@ class SubscriberPanel(wx.Panel):
                 self.stats_list.SetTextValue(last_time, i, 4)
                 found = True
                 break
-        
+
         if not found:
             self.stats_list.AppendItem([topic, str(stats["count"]), bytes_str, rate_str, last_time])
 
@@ -1293,24 +1350,19 @@ class SubscriberPanel(wx.Panel):
         # Update statistics
         current_time = time.time()
         msg_str = json.dumps(message) if isinstance(message, dict) else str(message)
-        msg_bytes = len(msg_str.encode('utf-8'))
-        
+        msg_bytes = len(msg_str.encode("utf-8"))
+
         if topic not in self.topic_stats:
-            self.topic_stats[topic] = {
-                "count": 0,
-                "bytes": 0,
-                "first_time": current_time,
-                "last_time": current_time
-            }
-        
+            self.topic_stats[topic] = {"count": 0, "bytes": 0, "first_time": current_time, "last_time": current_time}
+
         self.topic_stats[topic]["count"] += 1
         self.topic_stats[topic]["bytes"] += msg_bytes
         self.topic_stats[topic]["last_time"] = current_time
-        
+
         # Update stats display
         self.update_topic_stats_display(topic)
         self.update_summary_stats()
-        
+
         # Update message list
         # Check if topic exists in list, update it, or add new
         found = False
