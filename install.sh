@@ -75,27 +75,25 @@ create_desktop_shortcut() {
     DESKTOP_FILE_PATH="$APP_DIR/zmqanalyzer.desktop"
     ICON_PATH="$PROJECT_ROOT/zmqanalyzer.png"
 
-    mkdir -p "$APP_DIR" || { print_error "Failed to create $APP_DIR"; return 1; }
-    chown $SUDO_USER:$SUDO_USER "$APP_DIR" || { print_error "Failed to set ownership for $APP_DIR"; return 1; }
-    mkdir -p "$ICON_DIR" || { print_error "Failed to create $ICON_DIR"; return 1; }
-    chown $SUDO_USER:$SUDO_USER "$ICON_DIR" || { print_error "Failed to set ownership for $ICON_DIR"; return 1; }
+    # Create directories as the actual user
+    sudo -u $SUDO_USER mkdir -p "$APP_DIR" || { print_error "Failed to create $APP_DIR"; return 1; }
+    sudo -u $SUDO_USER mkdir -p "$ICON_DIR" || { print_error "Failed to create $ICON_DIR"; return 1; }
+    sudo -u $SUDO_USER mkdir -p "$USER_DESKTOP_DIR" || { print_error "Failed to create $USER_DESKTOP_DIR"; return 1; }
 
-    # Write desktop file
-    printf "%b" "$DESKTOP_FILE_CONTENT" > "$DESKTOP_FILE_PATH" || { print_error "Failed to write $DESKTOP_FILE_PATH"; return 1; }
-    chown $SUDO_USER:$SUDO_USER "$DESKTOP_FILE_PATH" || { print_error "Failed to set ownership for $DESKTOP_FILE_PATH"; return 1; }
+    # Write desktop file as the actual user
+    sudo -u $SUDO_USER bash -c "printf '%b' \"$DESKTOP_FILE_CONTENT\" > \"$DESKTOP_FILE_PATH\"" || { print_error "Failed to write $DESKTOP_FILE_PATH"; return 1; }
 
     # Make shortcut file executable
-    chmod +x "$DESKTOP_FILE_PATH" || { print_error "Failed to set executable permissions for $DESKTOP_FILE_PATH"; return 1; }
+    sudo -u $SUDO_USER chmod +x "$DESKTOP_FILE_PATH" || { print_error "Failed to set executable permissions for $DESKTOP_FILE_PATH"; return 1; }
 
-    # Create shortcut on user's desktop
-    ln -s "$DESKTOP_FILE_PATH" "$USER_DESKTOP_DIR/zmqanalyzer.desktop" || { print_error "Failed to create desktop shortcut"; return 1; }
+    # Create shortcut on user's desktop as the actual user
+    sudo -u $SUDO_USER ln -sf "$DESKTOP_FILE_PATH" "$USER_DESKTOP_DIR/zmqanalyzer.desktop" || { print_error "Failed to create desktop shortcut"; return 1; }
 
     print_info "Created desktop shortcut in: $APP_DIR"
 
-    # Copy icon to icon directory
+    # Copy icon to icon directory as the actual user
     if [ -f "$ICON_PATH" ]; then
-        cp "$ICON_PATH" "$ICON_DIR/zmqanalyzer.png" || { print_error "Failed to copy icon to $ICON_DIR"; return 1; }
-        chown $SUDO_USER:$SUDO_USER "$ICON_DIR/zmqanalyzer.png" || { print_error "Failed to set ownership for $ICON_DIR/zmqanalyzer.png"; return 1; }
+        sudo -u $SUDO_USER cp "$ICON_PATH" "$ICON_DIR/zmqanalyzer.png" || { print_error "Failed to copy icon to $ICON_DIR"; return 1; }
         print_info "Created icon in: $ICON_DIR"
     else
         print_warning "Icon not found at $ICON_PATH, skipping icon copy."

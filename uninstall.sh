@@ -48,28 +48,28 @@ uninstall() {
         print_warning "$WRAPPER not found"
     fi
 
-    # Remove desktop file
-    DESKTOP_FILE="/home/$SUDO_USER/.local/share/applications/zmqanalyzer.desktop"
-    if [ -f "$DESKTOP_FILE" ]; then
-        rm "$DESKTOP_FILE"
-        print_success "Removed $DESKTOP_FILE"
-    else
-        print_warning "$DESKTOP_FILE not found"
-    fi
-
-    # Remove desktop shortcut
+    # Remove desktop shortcut (symlink - use -L to test for symlink or file)
     DESKTOP_SHORTCUT="/home/$SUDO_USER/Desktop/zmqanalyzer.desktop"
-    if [ -f "$DESKTOP_SHORTCUT" ]; then
-        rm "$DESKTOP_SHORTCUT"
+    if [ -L "$DESKTOP_SHORTCUT" ] || [ -f "$DESKTOP_SHORTCUT" ]; then
+        sudo -u $SUDO_USER rm -f "$DESKTOP_SHORTCUT"
         print_success "Removed $DESKTOP_SHORTCUT"
     else
         print_warning "$DESKTOP_SHORTCUT not found"
     fi
 
+    # Remove desktop file
+    DESKTOP_FILE="/home/$SUDO_USER/.local/share/applications/zmqanalyzer.desktop"
+    if [ -f "$DESKTOP_FILE" ]; then
+        sudo -u $SUDO_USER rm -f "$DESKTOP_FILE"
+        print_success "Removed $DESKTOP_FILE"
+    else
+        print_warning "$DESKTOP_FILE not found"
+    fi
+
     # Remove icon
     ICON="/home/$SUDO_USER/.local/share/icons/zmqanalyzer.png"
     if [ -f "$ICON" ]; then
-        rm "$ICON"
+        sudo -u $SUDO_USER rm -f "$ICON"
         print_success "Removed $ICON"
     else
         print_warning "$ICON not found"
