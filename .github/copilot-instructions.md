@@ -9,6 +9,8 @@ ZmqAnalyzer is a Python desktop application acting as a "Postman for ZeroMQ". It
 - **PUSH/PULL**: Pipeline - task distribution with load balancing
 - **DEALER/ROUTER**: Advanced async request/reply - handle multiple clients without blocking
 - **PAIR**: Exclusive pair - simple 1:1 bidirectional connection
+- **XPUB/XSUB**: Extended PUB/SUB - for building brokers, shows subscription events
+- **STREAM**: Raw TCP - connect to non-ZMQ peers (HTTP servers, etc.)
 
 ## Architecture & Patterns
 
@@ -25,9 +27,12 @@ ZmqAnalyzer is a Python desktop application acting as a "Postman for ZeroMQ". It
   - `DealerPanel`: Standalone panel for DEALER pattern with async send/receive.
   - `RouterPanel`: Standalone panel for ROUTER pattern with port-based binding.
   - `PairPanel`: Standalone panel for PAIR pattern with bind/connect mode selection.
+  - `XPublisherPanel`: Standalone panel for XPUB pattern with subscription event display.
+  - `XSubscriberPanel`: Standalone panel for XSUB pattern with explicit subscription control.
+  - `StreamPanel`: Standalone panel for STREAM pattern for raw TCP connections.
   - `TopicFrame`: Popup window for viewing individual topic messages in Subscriber.
 - **ZMQ Logic**:
-  - Encapsulated in Singleton classes (`Publisher`, `Subscriber`, `Requester`, `Replyer`, `Pusher`, `Puller`, `Dealer`, `Router`, `PairSocket`).
+  - Encapsulated in Singleton classes (`Publisher`, `Subscriber`, `Requester`, `Replyer`, `Pusher`, `Puller`, `Dealer`, `Router`, `PairSocket`, `XPublisher`, `XSubscriber`, `StreamSocket`).
   - Uses `pyzmq` for ZeroMQ interactions.
   - Threading is used for receiving messages to avoid blocking the UI.
   - `wx.CallAfter` is used to update UI from background threads.

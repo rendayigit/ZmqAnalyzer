@@ -17,6 +17,8 @@ A desktop GUI application for testing and debugging ZeroMQ messaging — like Po
 | **PUSH/PULL** | Pipeline - task distribution with load balancing |
 | **DEALER/ROUTER** | Advanced async request/reply - handle multiple clients without blocking |
 | **PAIR** | Exclusive pair - simple 1:1 bidirectional connection |
+| **XPUB/XSUB** | Extended PUB/SUB - for building brokers, shows subscription events |
+| **STREAM** | Raw TCP - connect to non-ZMQ peers (HTTP servers, etc.) |
 
 ### Additional Capabilities
 
@@ -114,6 +116,27 @@ sudo ./uninstall.sh
 2. Enter **Address** (e.g., `tcp://localhost:5559`) or port number for bind mode
 3. Click **Start** to establish exclusive 1:1 connection
 4. Send and receive messages bidirectionally
+
+### XPub Tab (XPUB)
+
+1. Enter a **Port** number (e.g., `5560`)
+2. Click **Bind** to start the extended publisher
+3. Enter a **Topic** and your **Message**
+4. Click **Publish** — subscription events from clients appear on the right panel
+
+### XSub Tab (XSUB)
+
+1. Enter the XPUB **Address** (e.g., `tcp://localhost:5560`)
+2. Enter **Topics** to filter (comma-separated, leave empty for all)
+3. Click **Start** to begin receiving messages
+4. Works like Subscriber but with explicit subscription control
+
+### Stream Tab (STREAM)
+
+1. Select **Mode**: Connect (to a TCP server) or Bind (accept connections)
+2. Enter **Address** (e.g., `tcp://localhost:8080`) or port number
+3. Click **Start** to establish raw TCP connection
+4. Send raw data (e.g., HTTP requests) and receive raw responses
 
 ## Configuration
 

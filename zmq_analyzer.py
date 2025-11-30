@@ -30,6 +30,14 @@ CONFIG_RECENT_SENT_MSGS_ROUTER_KEY = "router_recent_messages"
 CONFIG_PAIR_ADDRESS_KEY = "pair_address"
 CONFIG_PAIR_MODE_KEY = "pair_mode"
 CONFIG_RECENT_SENT_MSGS_PAIR_KEY = "pair_recent_messages"
+# XPUB/XSUB pattern (broker/proxy)
+CONFIG_XPUB_PORT_KEY = "xpub_port"
+CONFIG_XSUB_ADDRESS_KEY = "xsub_address"
+CONFIG_RECENT_SENT_MSGS_XPUB_KEY = "xpub_recent_messages"
+# STREAM pattern (raw TCP)
+CONFIG_STREAM_ADDRESS_KEY = "stream_address"
+CONFIG_STREAM_MODE_KEY = "stream_mode"
+CONFIG_RECENT_SENT_MSGS_STREAM_KEY = "stream_recent_messages"
 
 
 # --- Config Class ---
@@ -826,6 +834,339 @@ class PairSocket:
                 break
             except Exception as e:
                 print(f"Pair loop error: {e}")
+
+
+class XPublisher:
+    """XPUB socket - like PUB but receives subscription messages from clients."""
+
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(XPublisher, cls).__new__(cls)
+            cls._instance.context = zmq.Context()
+            cls._instance.socket = None
+            cls._instance.port = ""
+            cls._instance.is_bound = False
+            cls._instance.running = False
+            cls._instance.thread = None
+            cls._instance.subscription_callback = None
+            cls._instance.lock = threading.Lock()
+        return cls._instance
+
+    def set_subscription_callback(self, callback):
+        self.subscription_callback = callback
+
+    def bind(self, port):
+        """Bind the XPUB socket to the specified port."""
+        with self.lock:
+            if self.is_bound:
+                return False, "XPublisher already bound"
+
+            try:
+                self.socket = self.context.socket(zmq.XPUB)
+                self.socket.bind(f"tcp://*:{port}")
+                self.port = port
+                self.is_bound = True
+                self.running = True
+                self.thread = threading.Thread(target=self._receive_loop, daemon=True)
+                self.thread.start()
+                print(f"XPublisher bound to port {port}")
+                return True, f"XPublisher bound to port {port}"
+            except zmq.ZMQError as e:
+                print(f"XPublisher bind error: {e}")
+                if self.socket:
+                    self.socket.close()
+                    self.socket = None
+                return False, f"Bind error: {e}"
+
+    def unbind(self):
+        """Unbind the XPUB socket."""
+        with self.lock:
+            if not self.is_bound:
+                return False, "XPublisher not bound"
+
+            self.running = False
+            try:
+                if self.socket:
+                    self.socket.close()
+                    self.socket = None
+                self.is_bound = False
+                if self.thread:
+                    self.thread.join(timeout=0.5)
+                    self.thread = None
+                print(f"XPublisher unbound from port {self.port}")
+                return True, f"XPublisher unbound from port {self.port}"
+            except Exception as e:
+                print(f"XPublisher unbind error: {e}")
+                return False, f"Unbind error: {e}"
+
+    def send_message(self, topic, message):
+        """Send a message on the specified topic."""
+        with self.lock:
+            if not self.is_bound or not self.socket:
+                return False, "XPublisher not bound"
+
+            try:
+                self.socket.send_multipart([topic.encode("utf-8"), message.encode("utf-8")])
+                print(f"XPublished to {topic}: {message[:100]}...")
+                return True, "Message published"
+            except zmq.ZMQError as e:
+                print(f"XPublish error: {e}")
+                return False, f"Publish error: {e}"
+
+    def _receive_loop(self):
+        """Receive subscription events from clients."""
+        while self.running and self.socket:
+            try:
+                if self.socket.poll(100):
+                    event = self.socket.recv()
+                    # First byte: 1 = subscribe, 0 = unsubscribe
+                    # Remaining bytes: topic
+                    if len(event) > 0:
+                        is_subscribe = event[0] == 1
+                        topic = event[1:].decode("utf-8", errors="replace")
+                        action = "subscribed" if is_subscribe else "unsubscribed"
+                        if self.subscription_callback:
+                            wx.CallAfter(self.subscription_callback, action, topic)
+            except zmq.ZMQError:
+                break
+            except Exception as e:
+                print(f"XPublisher loop error: {e}")
+
+
+class XSubscriber:
+    """XSUB socket - like SUB but can send subscription messages."""
+
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(XSubscriber, cls).__new__(cls)
+            cls._instance.context = zmq.Context()
+            cls._instance.socket = None
+            cls._instance.running = False
+            cls._instance.thread = None
+            cls._instance.callback = None
+            cls._instance.lock = threading.Lock()
+        return cls._instance
+
+    def start(self, topics, address):
+        """Start subscribing to topics at the specified address."""
+        self.stop()
+
+        try:
+            self.socket = self.context.socket(zmq.XSUB)
+            self.socket.connect(address)
+            # XSUB requires explicit subscription messages
+            for topic in topics:
+                # Send subscribe message: 0x01 + topic
+                self.socket.send(b"\x01" + topic.encode("utf-8"))
+
+            self.running = True
+            self.thread = threading.Thread(target=self._receive_loop, daemon=True)
+            self.thread.start()
+            print(f"XSubscriber started on {address} for topics {topics}")
+            return True, f"XSubscribed to {len(topics)} topic(s)"
+        except zmq.ZMQError as e:
+            print(f"XSubscriber connect error: {e}")
+            if self.socket:
+                self.socket.close()
+                self.socket = None
+            return False, f"Connection error: {e}"
+
+    def stop(self):
+        self.running = False
+        if self.socket:
+            self.socket.close()
+            self.socket = None
+        if self.thread:
+            self.thread.join(timeout=0.5)
+            self.thread = None
+
+    def set_callback(self, callback):
+        self.callback = callback
+
+    def subscribe(self, topic):
+        """Subscribe to a new topic."""
+        with self.lock:
+            if self.socket:
+                try:
+                    self.socket.send(b"\x01" + topic.encode("utf-8"))
+                    return True
+                except zmq.ZMQError:
+                    return False
+        return False
+
+    def unsubscribe(self, topic):
+        """Unsubscribe from a topic."""
+        with self.lock:
+            if self.socket:
+                try:
+                    self.socket.send(b"\x00" + topic.encode("utf-8"))
+                    return True
+                except zmq.ZMQError:
+                    return False
+        return False
+
+    def _receive_loop(self):
+        while self.running and self.socket:
+            try:
+                if self.socket.poll(100):
+                    parts = self.socket.recv_multipart()
+                    if len(parts) >= 2:
+                        topic = parts[0].decode("utf-8")
+                        message = parts[1].decode("utf-8")
+
+                        if self.callback:
+                            try:
+                                msg_json = json.loads(message)
+                                wx.CallAfter(self.callback, topic, msg_json)
+                            except json.JSONDecodeError:
+                                wx.CallAfter(self.callback, topic, message)
+            except zmq.ZMQError:
+                break
+            except Exception as e:
+                print(f"XSubscriber loop error: {e}")
+
+
+class StreamSocket:
+    """STREAM socket - raw TCP connection for non-ZMQ peers."""
+
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(StreamSocket, cls).__new__(cls)
+            cls._instance.context = zmq.Context()
+            cls._instance.socket = None
+            cls._instance.running = False
+            cls._instance.is_active = False
+            cls._instance.address = ""
+            cls._instance.mode = ""  # "bind" or "connect"
+            cls._instance.thread = None
+            cls._instance.callback = None
+            cls._instance.current_identity = None
+            cls._instance.lock = threading.Lock()
+        return cls._instance
+
+    def set_callback(self, callback):
+        self.callback = callback
+
+    def bind(self, port):
+        """Bind the stream socket to accept raw TCP connections."""
+        self.stop()
+
+        try:
+            self.socket = self.context.socket(zmq.STREAM)
+            self.socket.bind(f"tcp://*:{port}")
+            self.address = f"tcp://*:{port}"
+            self.mode = "bind"
+            self.running = True
+            self.is_active = True
+            self.thread = threading.Thread(target=self._receive_loop, daemon=True)
+            self.thread.start()
+            print(f"Stream bound to port {port}")
+            return True, f"Stream bound to port {port}"
+        except zmq.ZMQError as e:
+            print(f"Stream bind error: {e}")
+            if self.socket:
+                self.socket.close()
+                self.socket = None
+            return False, f"Bind error: {e}"
+
+    def connect(self, address):
+        """Connect to a raw TCP server."""
+        self.stop()
+
+        try:
+            self.socket = self.context.socket(zmq.STREAM)
+            self.socket.connect(address)
+            self.address = address
+            self.mode = "connect"
+            self.running = True
+            self.is_active = True
+            # Get the routing identity for sending
+            self.socket.setsockopt(zmq.LINGER, 0)
+            self.thread = threading.Thread(target=self._receive_loop, daemon=True)
+            self.thread.start()
+            print(f"Stream connected to {address}")
+            return True, f"Stream connected to {address}"
+        except zmq.ZMQError as e:
+            print(f"Stream connect error: {e}")
+            if self.socket:
+                self.socket.close()
+                self.socket = None
+            return False, f"Connection error: {e}"
+
+    def stop(self):
+        """Stop the stream socket."""
+        self.running = False
+        self.is_active = False
+
+        if self.socket:
+            try:
+                self.socket.close()
+            except:
+                pass
+            self.socket = None
+
+        if self.thread:
+            self.thread.join(timeout=0.5)
+            self.thread = None
+
+        self.current_identity = None
+        print("Stream stopped")
+        return True, "Stream stopped"
+
+    def send(self, message):
+        """Send raw data to the peer."""
+        with self.lock:
+            if not self.is_active or not self.socket:
+                return False, "Stream not active"
+
+            if not self.current_identity:
+                return False, "No peer connected"
+
+            try:
+                # STREAM requires identity frame + data frame
+                self.socket.send(self.current_identity, zmq.SNDMORE)
+                self.socket.send_string(message)
+                print(f"Stream sent: {message[:100]}...")
+                return True, "Data sent"
+            except zmq.ZMQError as e:
+                print(f"Stream send error: {e}")
+                return False, f"Send error: {e}"
+
+    def _receive_loop(self):
+        while self.running and self.socket:
+            try:
+                if self.socket.poll(100):
+                    # STREAM always receives: [identity, data]
+                    identity = self.socket.recv()
+                    data = self.socket.recv()
+
+                    # Store identity for replies
+                    if data:  # Non-empty data means actual message
+                        with self.lock:
+                            self.current_identity = identity
+
+                        message = data.decode("utf-8", errors="replace")
+                        if self.callback and message:
+                            wx.CallAfter(self.callback, identity.hex()[:16], message)
+                    elif identity and not data:
+                        # Empty data with identity means connect/disconnect event
+                        with self.lock:
+                            if self.current_identity == identity:
+                                pass  # Keep identity on disconnect for now
+                            else:
+                                self.current_identity = identity
+                        if self.callback:
+                            wx.CallAfter(self.callback, identity.hex()[:16], "[Connected]")
+            except zmq.ZMQError:
+                break
+            except Exception as e:
+                print(f"Stream loop error: {e}")
 
 
 # --- UI Classes ---
@@ -2892,6 +3233,735 @@ class PairPanel(wx.Panel):
             Config.remove_from_list(CONFIG_RECENT_SENT_MSGS_PAIR_KEY, msg)
 
 
+class XPublisherPanel(wx.Panel):
+    """UI Panel for XPUB socket - publishes and shows subscription events."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.recent_messages = []
+
+        self.main_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.is_bound = False
+
+        # Controls
+        self.controls_sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.port_lbl = wx.StaticText(self, label="Port:")
+        self.port_txt = wx.TextCtrl(self, value=Config.get(CONFIG_XPUB_PORT_KEY, "5560"), size=(80, -1))
+
+        self.bind_toggle_btn = wx.Button(self, label="Bind")
+
+        self.topic_lbl = wx.StaticText(self, label="Topic:")
+        self.topic_txt = wx.TextCtrl(self, value="test", size=(100, -1))
+
+        self.controls_sizer.Add(self.port_lbl, 0, wx.CENTER | wx.ALL, 5)
+        self.controls_sizer.Add(self.port_txt, 0, wx.CENTER | wx.ALL, 5)
+        self.controls_sizer.Add(self.bind_toggle_btn, 0, wx.CENTER | wx.ALL, 5)
+        self.controls_sizer.Add(self.topic_lbl, 0, wx.CENTER | wx.ALL, 5)
+        self.controls_sizer.Add(self.topic_txt, 0, wx.CENTER | wx.ALL, 5)
+
+        # Create horizontal splitter for message and subscriptions
+        self.h_splitter = wx.SplitterWindow(self, style=wx.SP_LIVE_UPDATE)
+
+        # Left side - Message input
+        self.left_panel = wx.Panel(self.h_splitter)
+        self.left_sizer = wx.BoxSizer(wx.VERTICAL)
+
+        self.v_splitter = wx.SplitterWindow(self.left_panel, style=wx.SP_LIVE_UPDATE)
+
+        self.msg_panel = wx.Panel(self.v_splitter)
+        self.msg_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.msg_lbl = wx.StaticText(self.msg_panel, label="Message:")
+        self.msg_txt = wx.TextCtrl(self.msg_panel, value="Enter your message here", style=wx.TE_MULTILINE)
+        self.msg_sizer.Add(self.msg_lbl, 0, wx.EXPAND | wx.ALL, 5)
+        self.msg_sizer.Add(self.msg_txt, 1, wx.EXPAND | wx.ALL, 5)
+        self.msg_panel.SetSizer(self.msg_sizer)
+
+        self.recent_panel = wx.Panel(self.v_splitter)
+        self.recent_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.recent_lbl = wx.StaticText(self.recent_panel, label="Recent Messages:")
+        self.recent_list = wx.ListBox(self.recent_panel)
+        self.recent_sizer.Add(self.recent_lbl, 0, wx.EXPAND | wx.LEFT | wx.TOP, 5)
+        self.recent_sizer.Add(self.recent_list, 1, wx.EXPAND)
+        self.recent_panel.SetSizer(self.recent_sizer)
+
+        self.v_splitter.SplitHorizontally(self.msg_panel, self.recent_panel)
+        self.v_splitter.SetSashGravity(0.5)
+        self.v_splitter.SetMinimumPaneSize(80)
+
+        self.left_sizer.Add(self.v_splitter, 1, wx.EXPAND)
+        self.left_panel.SetSizer(self.left_sizer)
+
+        # Right side - Subscription events
+        self.right_panel = wx.Panel(self.h_splitter)
+        self.right_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.subs_lbl = wx.StaticText(self.right_panel, label="Subscription Events:")
+        self.subs_list = wx.dataview.DataViewListCtrl(self.right_panel)
+        self.subs_list.AppendTextColumn("Time", width=80)
+        self.subs_list.AppendTextColumn("Action", width=100)
+        self.subs_list.AppendTextColumn("Topic", width=150)
+        self.right_sizer.Add(self.subs_lbl, 0, wx.EXPAND | wx.ALL, 5)
+        self.right_sizer.Add(self.subs_list, 1, wx.EXPAND | wx.ALL, 5)
+        self.right_panel.SetSizer(self.right_sizer)
+
+        self.h_splitter.SplitVertically(self.left_panel, self.right_panel)
+        self.h_splitter.SetSashGravity(0.5)
+        self.h_splitter.SetMinimumPaneSize(200)
+
+        # Publish Button
+        self.pub_btn = wx.Button(self, label="Publish Message")
+        self.pub_btn.Enable(False)
+
+        self.main_sizer.Add(self.controls_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        self.main_sizer.Add(self.h_splitter, 1, wx.EXPAND | wx.ALL, 5)
+        self.main_sizer.Add(self.pub_btn, 0, wx.ALIGN_RIGHT | wx.ALL, 5)
+
+        self.SetSizer(self.main_sizer)
+
+        self.bind_toggle_btn.Bind(wx.EVT_BUTTON, self.on_bind_toggle)
+        self.pub_btn.Bind(wx.EVT_BUTTON, self.on_publish)
+        self.recent_list.Bind(wx.EVT_LISTBOX_DCLICK, self.on_recent_selected)
+        self.recent_list.Bind(wx.EVT_RIGHT_DOWN, self.on_recent_right_click)
+        self.Bind(wx.EVT_SIZE, self.on_size)
+
+        self._splitters_initialized = False
+        self.load_recent()
+        XPublisher().set_subscription_callback(self.on_subscription_event)
+
+    def on_size(self, event):
+        event.Skip()
+        if not self._splitters_initialized and self.GetSize().GetWidth() > 0:
+            wx.CallAfter(self._init_splitter_positions)
+            self._splitters_initialized = True
+
+    def _init_splitter_positions(self):
+        h_size = self.h_splitter.GetSize().GetWidth()
+        if h_size > 0:
+            self.h_splitter.SetSashPosition(h_size // 2)
+        v_size = self.v_splitter.GetSize().GetHeight()
+        if v_size > 0:
+            self.v_splitter.SetSashPosition(v_size // 2)
+
+    def on_bind_toggle(self, event):
+        if self.is_bound:
+            success, message = XPublisher().unbind()
+            if success:
+                self.is_bound = False
+                self.bind_toggle_btn.SetLabel("Bind")
+                self.pub_btn.Enable(False)
+                self.port_txt.Enable(True)
+            else:
+                wx.MessageBox(message, "Unbind Error", wx.OK | wx.ICON_ERROR)
+        else:
+            port = self.port_txt.GetValue().strip()
+            if not port or not port.isdigit():
+                wx.MessageBox("Please enter a valid port number", "Input Error", wx.OK | wx.ICON_WARNING)
+                return
+
+            success, message = XPublisher().bind(port)
+            if success:
+                Config.set(CONFIG_XPUB_PORT_KEY, port)
+                self.is_bound = True
+                self.bind_toggle_btn.SetLabel("Unbind")
+                self.pub_btn.Enable(True)
+                self.port_txt.Enable(False)
+            else:
+                wx.MessageBox(message, "Bind Error", wx.OK | wx.ICON_ERROR)
+
+    def on_subscription_event(self, action, topic):
+        """Handle subscription/unsubscription events from clients."""
+        timestamp = time.strftime("%H:%M:%S")
+        self.subs_list.AppendItem([timestamp, action, topic or "(all)"])
+
+    def _to_single_line(self, msg):
+        return " ".join(msg.split())
+
+    def load_recent(self):
+        msgs = Config.get_list(CONFIG_RECENT_SENT_MSGS_XPUB_KEY)
+        for msg in reversed(msgs):
+            self.recent_messages.insert(0, msg)
+            self.recent_list.Insert(self._to_single_line(msg), 0)
+
+    def on_publish(self, event):
+        topic = self.topic_txt.GetValue().strip()
+        message = self.msg_txt.GetValue()
+
+        if not topic:
+            wx.MessageBox("Please enter a topic", "Input Error", wx.OK | wx.ICON_WARNING)
+            return
+
+        try:
+            parsed = json.loads(message)
+            formatted = json.dumps(parsed, indent=2)
+            self.msg_txt.SetValue(formatted)
+            message = formatted
+        except json.JSONDecodeError:
+            pass
+
+        success, msg = XPublisher().send_message(topic, message)
+        if not success:
+            wx.MessageBox(msg, "Publish Error", wx.OK | wx.ICON_ERROR)
+            return
+
+        if message not in self.recent_messages:
+            self.recent_messages.insert(0, message)
+            self.recent_list.Insert(self._to_single_line(message), 0)
+            Config.add_to_list(CONFIG_RECENT_SENT_MSGS_XPUB_KEY, message)
+
+    def on_recent_selected(self, event):
+        selection = self.recent_list.GetSelection()
+        if selection != wx.NOT_FOUND:
+            self.msg_txt.SetValue(self.recent_messages[selection])
+
+    def on_recent_right_click(self, event):
+        item = self.recent_list.HitTest(event.GetPosition())
+        if item != wx.NOT_FOUND:
+            self.recent_list.SetSelection(item)
+
+        menu = wx.Menu()
+        use_item = menu.Append(wx.ID_ANY, "Use Message")
+        copy_item = menu.Append(wx.ID_COPY, "Copy Message")
+        del_item = menu.Append(wx.ID_DELETE, "Delete Message")
+
+        self.Bind(wx.EVT_MENU, self.on_use_context, use_item)
+        self.Bind(wx.EVT_MENU, self.on_copy_context, copy_item)
+        self.Bind(wx.EVT_MENU, self.on_delete_context, del_item)
+
+        self.recent_list.PopupMenu(menu, event.GetPosition())
+        menu.Destroy()
+
+    def on_use_context(self, event):
+        selection = self.recent_list.GetSelection()
+        if selection != wx.NOT_FOUND:
+            self.msg_txt.SetValue(self.recent_messages[selection])
+
+    def on_copy_context(self, event):
+        selection = self.recent_list.GetSelection()
+        if selection != wx.NOT_FOUND:
+            if wx.TheClipboard.Open():
+                wx.TheClipboard.SetData(wx.TextDataObject(self.recent_messages[selection]))
+                wx.TheClipboard.Close()
+
+    def on_delete_context(self, event):
+        selection = self.recent_list.GetSelection()
+        if selection != wx.NOT_FOUND:
+            msg = self.recent_messages[selection]
+            self.recent_messages.pop(selection)
+            self.recent_list.Delete(selection)
+            Config.remove_from_list(CONFIG_RECENT_SENT_MSGS_XPUB_KEY, msg)
+
+
+class XSubscriberPanel(wx.Panel):
+    """UI Panel for XSUB socket - subscribes with explicit subscription control."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.is_running = False
+        self.topic_stats = {}  # {topic: {"count": int, "bytes": int, "first_time": float, "last_time": float}}
+        self.start_time = None
+
+        self.main_sizer = wx.BoxSizer(wx.VERTICAL)
+
+        # Controls
+        self.controls_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.addr_lbl = wx.StaticText(self, label="Address:")
+        self.addr_txt = wx.TextCtrl(
+            self,
+            value=Config.get(CONFIG_XSUB_ADDRESS_KEY, "tcp://localhost:5560"),
+            size=(200, -1),
+        )
+        self.topic_lbl = wx.StaticText(self, label="Topics (comma sep):")
+        self.topic_txt = wx.TextCtrl(self, value="", size=(150, -1))
+
+        self.toggle_btn = wx.Button(self, label="Start")
+
+        self.controls_sizer.Add(self.addr_lbl, 0, wx.CENTER | wx.ALL, 5)
+        self.controls_sizer.Add(self.addr_txt, 0, wx.CENTER | wx.ALL, 5)
+        self.controls_sizer.Add(self.topic_lbl, 0, wx.CENTER | wx.ALL, 5)
+        self.controls_sizer.Add(self.topic_txt, 1, wx.CENTER | wx.ALL, 5)
+        self.controls_sizer.Add(self.toggle_btn, 0, wx.CENTER | wx.ALL, 5)
+
+        # Create splitter for messages and stats
+        self.splitter = wx.SplitterWindow(self, style=wx.SP_LIVE_UPDATE)
+
+        # Message List Panel
+        self.msg_panel = wx.Panel(self.splitter)
+        self.msg_panel_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.msg_list = wx.dataview.DataViewListCtrl(self.msg_panel)
+        self.msg_list.AppendTextColumn("Topic", width=100)
+        self.msg_list.AppendTextColumn("Message", width=400)
+        self.msg_panel_sizer.Add(self.msg_list, 1, wx.EXPAND)
+        self.msg_panel.SetSizer(self.msg_panel_sizer)
+
+        # Statistics Panel
+        self.stats_panel = wx.Panel(self.splitter)
+        self.stats_sizer = wx.BoxSizer(wx.VERTICAL)
+
+        # Stats header with reset button
+        stats_header_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        stats_header = wx.StaticText(self.stats_panel, label="Statistics")
+        stats_header.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+        stats_header_sizer.Add(stats_header, 0, wx.CENTER | wx.ALL, 5)
+        stats_header_sizer.AddStretchSpacer(1)
+        self.reset_stats_btn = wx.Button(self.stats_panel, label="Reset Stats")
+        stats_header_sizer.Add(self.reset_stats_btn, 0, wx.ALL, 2)
+        self.stats_sizer.Add(stats_header_sizer, 0, wx.EXPAND | wx.ALL, 2)
+
+        # Totals section title
+        totals_title = wx.StaticText(self.stats_panel, label="Totals")
+        totals_title.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+        self.stats_sizer.Add(totals_title, 0, wx.LEFT | wx.TOP, 5)
+
+        # Summary stats grid
+        summary_grid = wx.FlexGridSizer(2, 5, 5, 20)  # 2 rows, 5 cols, vgap=5, hgap=20
+        for i in range(5):
+            summary_grid.AddGrowableCol(i, 1)
+
+        # Row 1: Labels
+        for label in ["Messages", "Data Size", "Topics", "Rate", "Speed"]:
+            lbl = wx.StaticText(self.stats_panel, label=label)
+            lbl.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+            summary_grid.Add(lbl, 0, wx.ALIGN_CENTER)
+
+        # Row 2: Values
+        self.summary_msgs = wx.StaticText(self.stats_panel, label="0")
+        self.summary_bytes = wx.StaticText(self.stats_panel, label="0 bytes")
+        self.summary_topics = wx.StaticText(self.stats_panel, label="0")
+        self.summary_rate = wx.StaticText(self.stats_panel, label="-")
+        self.summary_speed = wx.StaticText(self.stats_panel, label="-")
+
+        summary_grid.Add(self.summary_msgs, 0, wx.ALIGN_CENTER)
+        summary_grid.Add(self.summary_bytes, 0, wx.ALIGN_CENTER)
+        summary_grid.Add(self.summary_topics, 0, wx.ALIGN_CENTER)
+        summary_grid.Add(self.summary_rate, 0, wx.ALIGN_CENTER)
+        summary_grid.Add(self.summary_speed, 0, wx.ALIGN_CENTER)
+
+        self.stats_sizer.Add(summary_grid, 0, wx.EXPAND | wx.ALL, 5)
+
+        # Per-Topic section title
+        per_topic_title = wx.StaticText(self.stats_panel, label="Per Topic")
+        per_topic_title.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+        self.stats_sizer.Add(per_topic_title, 0, wx.LEFT | wx.TOP | wx.BOTTOM, 5)
+
+        # Stats list
+        self.stats_list = wx.dataview.DataViewListCtrl(self.stats_panel)
+        self.stats_list.AppendTextColumn("Topic", width=150)
+        self.stats_list.AppendTextColumn("Count", width=100)
+        self.stats_list.AppendTextColumn("Bytes", width=120)
+        self.stats_list.AppendTextColumn("Rate (msg/s)", width=120)
+        self.stats_list.AppendTextColumn("Last Received", width=150)
+        self.stats_sizer.Add(self.stats_list, 1, wx.EXPAND)
+
+        self.stats_panel.SetSizer(self.stats_sizer)
+
+        self.splitter.SplitHorizontally(self.msg_panel, self.stats_panel)
+        self.splitter.SetSashGravity(0.5)
+        self.splitter.SetMinimumPaneSize(100)
+
+        self.main_sizer.Add(self.controls_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        self.main_sizer.Add(self.splitter, 1, wx.EXPAND | wx.ALL, 5)
+
+        self.SetSizer(self.main_sizer)
+
+        self.toggle_btn.Bind(wx.EVT_BUTTON, self.on_toggle)
+        self.reset_stats_btn.Bind(wx.EVT_BUTTON, self.on_reset_stats)
+        self.msg_list.Bind(wx.dataview.EVT_DATAVIEW_ITEM_CONTEXT_MENU, self.on_msg_list_right_click)
+        self.Bind(wx.EVT_SIZE, self.on_size)
+
+        self._splitter_initialized = False
+        XSubscriber().set_callback(self.on_message_received)
+
+    def on_size(self, event):
+        event.Skip()
+        if not self._splitter_initialized and self.GetSize().GetWidth() > 0:
+            wx.CallAfter(self._init_splitter_position)
+            self._splitter_initialized = True
+
+    def _init_splitter_position(self):
+        size = self.splitter.GetSize().GetHeight()
+        if size > 0:
+            self.splitter.SetSashPosition(size // 2)
+        self.stats_panel.Layout()
+
+    def on_reset_stats(self, event):
+        """Reset all statistics."""
+        self.topic_stats = {}
+        self.start_time = time.time() if self.is_running else None
+        self.stats_list.DeleteAllItems()
+        self.update_summary_stats()
+
+    def on_toggle(self, event):
+        if self.is_running:
+            XSubscriber().stop()
+            self.is_running = False
+            self.toggle_btn.SetLabel("Start")
+            self.addr_txt.Enable(True)
+            self.topic_txt.Enable(True)
+        else:
+            addr = self.addr_txt.GetValue().strip()
+            topics_str = self.topic_txt.GetValue().strip()
+
+            if not addr:
+                wx.MessageBox("Please enter an address", "Input Error", wx.OK | wx.ICON_WARNING)
+                return
+
+            if topics_str:
+                topics = [t.strip() for t in topics_str.split(",") if t.strip()]
+            else:
+                topics = [""]
+
+            Config.set(CONFIG_XSUB_ADDRESS_KEY, addr)
+            success, message = XSubscriber().start(topics, addr)
+            if success:
+                self.is_running = True
+                self.start_time = time.time()
+                self.topic_stats = {}
+                self.toggle_btn.SetLabel("Stop")
+                self.addr_txt.Enable(False)
+                self.topic_txt.Enable(False)
+                wx.CallAfter(self.stats_panel.Layout)
+            else:
+                wx.MessageBox(message, "Connection Error", wx.OK | wx.ICON_ERROR)
+
+    def update_summary_stats(self):
+        """Update the summary statistics labels."""
+        total_msgs = sum(s["count"] for s in self.topic_stats.values())
+        total_bytes = sum(s["bytes"] for s in self.topic_stats.values())
+        total_topics = len(self.topic_stats)
+
+        # Format bytes nicely
+        if total_bytes >= 1024 * 1024:
+            bytes_str = f"{total_bytes / (1024 * 1024):.2f} MB"
+        elif total_bytes >= 1024:
+            bytes_str = f"{total_bytes / 1024:.2f} KB"
+        else:
+            bytes_str = f"{total_bytes} bytes"
+
+        # Calculate overall rate and speed
+        rate_str = "-"
+        speed_str = "-"
+        if self.start_time and self.topic_stats:
+            elapsed = time.time() - self.start_time
+            if elapsed > 0:
+                rate = total_msgs / elapsed
+                rate_str = f"{rate:.2f} msg/s"
+                speed = total_bytes / elapsed
+                if speed >= 1024 * 1024:
+                    speed_str = f"{speed / (1024 * 1024):.2f} MB/s"
+                elif speed >= 1024:
+                    speed_str = f"{speed / 1024:.2f} KB/s"
+                else:
+                    speed_str = f"{speed:.2f} B/s"
+
+        self.summary_msgs.SetLabel(str(total_msgs))
+        self.summary_bytes.SetLabel(bytes_str)
+        self.summary_topics.SetLabel(str(total_topics))
+        self.summary_rate.SetLabel(rate_str)
+        self.summary_speed.SetLabel(speed_str)
+
+    def update_topic_stats_display(self, topic):
+        """Update the statistics list for a specific topic."""
+        stats = self.topic_stats.get(topic)
+        if not stats:
+            return
+
+        # Calculate rate
+        elapsed = stats["last_time"] - stats["first_time"]
+        if elapsed > 0:
+            rate = stats["count"] / elapsed
+            rate_str = f"{rate:.2f}"
+        else:
+            rate_str = "-"
+
+        # Format bytes
+        if stats["bytes"] >= 1024 * 1024:
+            bytes_str = f"{stats['bytes'] / (1024 * 1024):.2f} MB"
+        elif stats["bytes"] >= 1024:
+            bytes_str = f"{stats['bytes'] / 1024:.2f} KB"
+        else:
+            bytes_str = f"{stats['bytes']} B"
+
+        # Format last received time
+        last_time = time.strftime("%H:%M:%S", time.localtime(stats["last_time"]))
+
+        # Find or add row
+        found = False
+        for i in range(self.stats_list.GetItemCount()):
+            if self.stats_list.GetTextValue(i, 0) == topic:
+                self.stats_list.SetTextValue(str(stats["count"]), i, 1)
+                self.stats_list.SetTextValue(bytes_str, i, 2)
+                self.stats_list.SetTextValue(rate_str, i, 3)
+                self.stats_list.SetTextValue(last_time, i, 4)
+                found = True
+                break
+
+        if not found:
+            self.stats_list.AppendItem([topic, str(stats["count"]), bytes_str, rate_str, last_time])
+
+    def on_message_received(self, topic, message):
+        current_time = time.time()
+        msg_str = json.dumps(message, indent=2) if isinstance(message, dict) else str(message)
+        msg_bytes = len(msg_str.encode("utf-8"))
+
+        if topic not in self.topic_stats:
+            self.topic_stats[topic] = {"count": 0, "bytes": 0, "first_time": current_time, "last_time": current_time}
+
+        self.topic_stats[topic]["count"] += 1
+        self.topic_stats[topic]["bytes"] += msg_bytes
+        self.topic_stats[topic]["last_time"] = current_time
+
+        # Update message list
+        found = False
+        for i in range(self.msg_list.GetItemCount()):
+            if self.msg_list.GetTextValue(i, 0) == topic:
+                self.msg_list.SetTextValue(msg_str, i, 1)
+                found = True
+                break
+        if not found:
+            self.msg_list.AppendItem([topic, msg_str])
+
+        # Update stats display
+        self.update_topic_stats_display(topic)
+        self.update_summary_stats()
+
+    def on_msg_list_right_click(self, event):
+        menu = wx.Menu()
+        clear_item = menu.Append(wx.ID_ANY, "Clear Messages")
+        self.Bind(wx.EVT_MENU, self.on_clear_messages, clear_item)
+        self.PopupMenu(menu)
+        menu.Destroy()
+
+    def on_clear_messages(self, event):
+        self.msg_list.DeleteAllItems()
+
+
+class StreamPanel(wx.Panel):
+    """UI Panel for STREAM socket - raw TCP connection."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.recent_messages = []
+        self.is_active = False
+
+        self.main_sizer = wx.BoxSizer(wx.VERTICAL)
+
+        # Top Sizer (Mode, Address/Port, Connect button)
+        self.top_sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.mode_lbl = wx.StaticText(self, label="Mode:")
+        self.mode_choice = wx.Choice(self, choices=["Connect", "Bind"])
+        self.mode_choice.SetSelection(0 if Config.get(CONFIG_STREAM_MODE_KEY, "connect") == "connect" else 1)
+
+        self.addr_lbl = wx.StaticText(self, label="Address/Port:")
+        default_addr = Config.get(CONFIG_STREAM_ADDRESS_KEY, "tcp://localhost:8080")
+        self.addr_txt = wx.TextCtrl(self, value=default_addr, size=(200, -1))
+
+        self.connect_toggle_btn = wx.Button(self, label="Start")
+
+        self.top_sizer.Add(self.mode_lbl, 0, wx.CENTER | wx.ALL, 5)
+        self.top_sizer.Add(self.mode_choice, 0, wx.CENTER | wx.ALL, 5)
+        self.top_sizer.Add(self.addr_lbl, 0, wx.CENTER | wx.ALL, 5)
+        self.top_sizer.Add(self.addr_txt, 0, wx.EXPAND | wx.ALL, 5)
+        self.top_sizer.Add(self.connect_toggle_btn, 0, wx.CENTER | wx.ALL, 5)
+
+        # Create horizontal splitter for Send/Recv
+        self.h_splitter = wx.SplitterWindow(self, style=wx.SP_LIVE_UPDATE)
+
+        # Send Side Panel
+        self.send_panel = wx.Panel(self.h_splitter)
+        self.send_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.send_lbl = wx.StaticText(self.send_panel, label="Send (raw data):")
+
+        self.v_splitter = wx.SplitterWindow(self.send_panel, style=wx.SP_LIVE_UPDATE)
+
+        self.msg_panel = wx.Panel(self.v_splitter)
+        self.msg_panel_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.send_txt = wx.TextCtrl(self.msg_panel, value="GET / HTTP/1.1\r\nHost: localhost\r\n\r\n", style=wx.TE_MULTILINE)
+        self.msg_panel_sizer.Add(self.send_txt, 1, wx.EXPAND)
+        self.msg_panel.SetSizer(self.msg_panel_sizer)
+
+        self.recent_panel = wx.Panel(self.v_splitter)
+        self.recent_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.recent_lbl = wx.StaticText(self.recent_panel, label="Recent:")
+        self.recent_list = wx.ListBox(self.recent_panel)
+        self.recent_sizer.Add(self.recent_lbl, 0, wx.EXPAND | wx.LEFT | wx.TOP, 5)
+        self.recent_sizer.Add(self.recent_list, 1, wx.EXPAND)
+        self.recent_panel.SetSizer(self.recent_sizer)
+
+        self.v_splitter.SplitHorizontally(self.msg_panel, self.recent_panel)
+        self.v_splitter.SetSashGravity(0.5)
+        self.v_splitter.SetMinimumPaneSize(80)
+
+        self.send_sizer.Add(self.send_lbl, 0, wx.EXPAND | wx.ALL, 5)
+        self.send_sizer.Add(self.v_splitter, 1, wx.EXPAND | wx.ALL, 5)
+        self.send_panel.SetSizer(self.send_sizer)
+
+        # Recv Side Panel
+        self.recv_panel = wx.Panel(self.h_splitter)
+        self.recv_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.recv_lbl = wx.StaticText(self.recv_panel, label="Received (raw data):")
+        self.recv_txt = wx.TextCtrl(
+            self.recv_panel,
+            value="\n\n\n\t\tReceived data will be displayed here",
+            style=wx.TE_MULTILINE | wx.TE_READONLY,
+        )
+        self.recv_sizer.Add(self.recv_lbl, 0, wx.EXPAND | wx.ALL, 5)
+        self.recv_sizer.Add(self.recv_txt, 1, wx.EXPAND | wx.ALL, 5)
+        self.recv_panel.SetSizer(self.recv_sizer)
+
+        self.h_splitter.SplitVertically(self.send_panel, self.recv_panel)
+        self.h_splitter.SetSashGravity(0.5)
+        self.h_splitter.SetMinimumPaneSize(200)
+
+        # Control Sizer
+        self.ctrl_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.peer_lbl = wx.StaticText(self, label="Peer: None")
+        self.send_btn = wx.Button(self, label="Send Data")
+        self.send_btn.Enable(False)
+        self.ctrl_sizer.Add(self.peer_lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
+        self.ctrl_sizer.AddStretchSpacer(1)
+        self.ctrl_sizer.Add(self.send_btn, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
+
+        self.main_sizer.Add(self.top_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        self.main_sizer.Add(self.h_splitter, 1, wx.EXPAND | wx.ALL, 5)
+        self.main_sizer.Add(self.ctrl_sizer, 0, wx.EXPAND | wx.ALL, 5)
+
+        self.SetSizer(self.main_sizer)
+
+        self.connect_toggle_btn.Bind(wx.EVT_BUTTON, self.on_connect_toggle)
+        self.send_btn.Bind(wx.EVT_BUTTON, self.on_send_message)
+        self.recent_list.Bind(wx.EVT_LISTBOX_DCLICK, self.on_recent_selected)
+        self.recent_list.Bind(wx.EVT_RIGHT_DOWN, self.on_recent_right_click)
+        self.Bind(wx.EVT_SIZE, self.on_size)
+
+        self._splitters_initialized = False
+        self.load_recent_messages()
+        StreamSocket().set_callback(self.recv_message)
+
+    def on_size(self, event):
+        event.Skip()
+        if not self._splitters_initialized and self.GetSize().GetWidth() > 0:
+            wx.CallAfter(self._init_splitter_positions)
+            self._splitters_initialized = True
+
+    def _init_splitter_positions(self):
+        h_size = self.h_splitter.GetSize().GetWidth()
+        if h_size > 0:
+            self.h_splitter.SetSashPosition(h_size // 2)
+        v_size = self.v_splitter.GetSize().GetHeight()
+        if v_size > 0:
+            self.v_splitter.SetSashPosition(v_size // 2)
+
+    def _to_single_line(self, msg):
+        return " ".join(msg.split())
+
+    def load_recent_messages(self):
+        msgs = Config.get_list(CONFIG_RECENT_SENT_MSGS_STREAM_KEY)
+        for msg in reversed(msgs):
+            self.recent_messages.insert(0, msg)
+            self.recent_list.Insert(self._to_single_line(msg), 0)
+
+    def on_connect_toggle(self, event):
+        if self.is_active:
+            StreamSocket().stop()
+            self.is_active = False
+            self.connect_toggle_btn.SetLabel("Start")
+            self.send_btn.Enable(False)
+            self.addr_txt.Enable(True)
+            self.mode_choice.Enable(True)
+            self.peer_lbl.SetLabel("Peer: None")
+        else:
+            addr = self.addr_txt.GetValue().strip()
+            if not addr:
+                wx.MessageBox("Please enter an address or port", "Input Error", wx.OK | wx.ICON_WARNING)
+                return
+
+            mode = "connect" if self.mode_choice.GetSelection() == 0 else "bind"
+            Config.set(CONFIG_STREAM_MODE_KEY, mode)
+            Config.set(CONFIG_STREAM_ADDRESS_KEY, addr)
+
+            if mode == "connect":
+                success, message = StreamSocket().connect(addr)
+            else:
+                port = addr.replace("tcp://*:", "").replace("tcp://localhost:", "")
+                if not port.isdigit():
+                    wx.MessageBox("For bind mode, enter a port number", "Input Error", wx.OK | wx.ICON_WARNING)
+                    return
+                success, message = StreamSocket().bind(port)
+
+            if success:
+                self.is_active = True
+                self.connect_toggle_btn.SetLabel("Stop")
+                self.send_btn.Enable(True)
+                self.addr_txt.Enable(False)
+                self.mode_choice.Enable(False)
+            else:
+                wx.MessageBox(message, "Connection Error", wx.OK | wx.ICON_ERROR)
+
+    def on_send_message(self, event):
+        message = self.send_txt.GetValue()
+
+        success, msg = StreamSocket().send(message)
+        if not success:
+            wx.MessageBox(msg, "Send Error", wx.OK | wx.ICON_ERROR)
+            return
+
+        if message not in self.recent_messages:
+            self.recent_messages.insert(0, message)
+            self.recent_list.Insert(self._to_single_line(message), 0)
+            Config.add_to_list(CONFIG_RECENT_SENT_MSGS_STREAM_KEY, message)
+
+    def recv_message(self, peer_id, message):
+        self.peer_lbl.SetLabel(f"Peer: {peer_id}")
+        # Append to received text
+        current = self.recv_txt.GetValue()
+        if current.startswith("\n\n\n\t\t"):
+            current = ""
+        self.recv_txt.SetValue(current + message)
+
+    def on_recent_selected(self, event):
+        selection = self.recent_list.GetSelection()
+        if selection != wx.NOT_FOUND:
+            self.send_txt.SetValue(self.recent_messages[selection])
+
+    def on_recent_right_click(self, event):
+        item = self.recent_list.HitTest(event.GetPosition())
+        if item != wx.NOT_FOUND:
+            self.recent_list.SetSelection(item)
+
+        menu = wx.Menu()
+        use_item = menu.Append(wx.ID_ANY, "Use Message")
+        copy_item = menu.Append(wx.ID_COPY, "Copy Message")
+        del_item = menu.Append(wx.ID_DELETE, "Delete Message")
+
+        self.Bind(wx.EVT_MENU, self.on_use_context, use_item)
+        self.Bind(wx.EVT_MENU, self.on_copy_context, copy_item)
+        self.Bind(wx.EVT_MENU, self.on_delete_context, del_item)
+
+        self.recent_list.PopupMenu(menu, event.GetPosition())
+        menu.Destroy()
+
+    def on_use_context(self, event):
+        selection = self.recent_list.GetSelection()
+        if selection != wx.NOT_FOUND:
+            self.send_txt.SetValue(self.recent_messages[selection])
+
+    def on_copy_context(self, event):
+        selection = self.recent_list.GetSelection()
+        if selection != wx.NOT_FOUND:
+            if wx.TheClipboard.Open():
+                wx.TheClipboard.SetData(wx.TextDataObject(self.recent_messages[selection]))
+                wx.TheClipboard.Close()
+
+    def on_delete_context(self, event):
+        selection = self.recent_list.GetSelection()
+        if selection != wx.NOT_FOUND:
+            msg = self.recent_messages[selection]
+            self.recent_messages.pop(selection)
+            self.recent_list.Delete(selection)
+            Config.remove_from_list(CONFIG_RECENT_SENT_MSGS_STREAM_KEY, msg)
+
+
 class MainFrame(wx.Frame):
     def __init__(self):
         super().__init__(None, title="ZmqAnalyzer (Python)", size=(900, 650))
@@ -2907,6 +3977,9 @@ class MainFrame(wx.Frame):
         self.dealer_panel = DealerPanel(self.notebook)
         self.router_panel = RouterPanel(self.notebook)
         self.pair_panel = PairPanel(self.notebook)
+        self.xpub_panel = XPublisherPanel(self.notebook)
+        self.xsub_panel = XSubscriberPanel(self.notebook)
+        self.stream_panel = StreamPanel(self.notebook)
 
         self.notebook.AddPage(self.publisher_panel, "Publisher")
         self.notebook.AddPage(self.subscriber_panel, "Subscriber")
@@ -2917,6 +3990,9 @@ class MainFrame(wx.Frame):
         self.notebook.AddPage(self.dealer_panel, "Dealer")
         self.notebook.AddPage(self.router_panel, "Router")
         self.notebook.AddPage(self.pair_panel, "Pair")
+        self.notebook.AddPage(self.xpub_panel, "XPub")
+        self.notebook.AddPage(self.xsub_panel, "XSub")
+        self.notebook.AddPage(self.stream_panel, "Stream")
 
         # Menu
         menubar = wx.MenuBar()
@@ -2942,6 +4018,9 @@ class MainFrame(wx.Frame):
         Dealer().disconnect()
         Router().unbind()
         PairSocket().stop()
+        XPublisher().unbind()
+        XSubscriber().stop()
+        StreamSocket().stop()
         event.Skip()
 
 
