@@ -364,6 +364,7 @@ class BaseComPanel(wx.Panel):
         super().__init__(parent)
         self.recent_msgs_key = recent_msgs_key
         self.send_callback = send_callback
+        self.recent_messages = []  # Store original messages
 
         self.main_sizer = wx.BoxSizer(wx.VERTICAL)
 
@@ -399,8 +400,9 @@ class BaseComPanel(wx.Panel):
         # Recent panel (in vertical splitter)
         self.recent_panel = wx.Panel(self.v_splitter)
         self.recent_sizer = wx.BoxSizer(wx.VERTICAL)
-        self.recent_list = wx.ListCtrl(self.recent_panel, style=wx.LC_REPORT)
-        self.recent_list.InsertColumn(0, "Recently Sent Messages", width=450)
+        self.recent_lbl = wx.StaticText(self.recent_panel, label="Recent Messages:")
+        self.recent_list = wx.ListBox(self.recent_panel)
+        self.recent_sizer.Add(self.recent_lbl, 0, wx.EXPAND | wx.LEFT | wx.TOP, 5)
         self.recent_sizer.Add(self.recent_list, 1, wx.EXPAND)
         self.recent_panel.SetSizer(self.recent_sizer)
 
@@ -444,8 +446,8 @@ class BaseComPanel(wx.Panel):
 
         # Bindings
         self.send_btn.Bind(wx.EVT_BUTTON, self.on_send_message)
-        self.recent_list.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_recent_selected)
-        self.recent_list.Bind(wx.EVT_LIST_ITEM_RIGHT_CLICK, self.on_recent_right_click)
+        self.recent_list.Bind(wx.EVT_LISTBOX_DCLICK, self.on_recent_selected)
+        self.recent_list.Bind(wx.EVT_RIGHT_DOWN, self.on_recent_right_click)
         self.Bind(wx.EVT_SIZE, self.on_size)
 
         self._splitters_initialized = False
@@ -469,10 +471,15 @@ class BaseComPanel(wx.Panel):
         if v_size > 0:
             self.v_splitter.SetSashPosition(v_size // 2)
 
+    def _to_single_line(self, msg):
+        """Convert a message to single line for display."""
+        return " ".join(msg.split())
+
     def load_recent_messages(self):
         msgs = Config.get_list(self.recent_msgs_key)
-        for msg in msgs:
-            self.recent_list.InsertItem(0, msg)
+        for msg in reversed(msgs):
+            self.recent_messages.insert(0, msg)
+            self.recent_list.Insert(self._to_single_line(msg), 0)
 
     def on_send_message(self, event):
         message = self.send_txt.GetValue()
@@ -489,15 +496,10 @@ class BaseComPanel(wx.Panel):
         if self.send_callback:
             self.send_callback(message)
 
-        # Add to recent
-        found = False
-        for i in range(self.recent_list.GetItemCount()):
-            if self.recent_list.GetItemText(i) == message:
-                found = True
-                break
-
-        if not found:
-            self.recent_list.InsertItem(0, message)
+        # Add to recent if not already present
+        if message not in self.recent_messages:
+            self.recent_messages.insert(0, message)
+            self.recent_list.Insert(self._to_single_line(message), 0)
             Config.add_to_list(self.recent_msgs_key, message)
 
     def recv_message(self, message):
@@ -521,11 +523,16 @@ class BaseComPanel(wx.Panel):
         return self.address_txt.GetValue()
 
     def on_recent_selected(self, event):
-        item = event.GetIndex()
-        if item != -1:
-            self.send_txt.SetValue(self.recent_list.GetItemText(item))
+        selection = self.recent_list.GetSelection()
+        if selection != wx.NOT_FOUND:
+            self.send_txt.SetValue(self.recent_messages[selection])
 
     def on_recent_right_click(self, event):
+        # Select item under cursor
+        item = self.recent_list.HitTest(event.GetPosition())
+        if item != wx.NOT_FOUND:
+            self.recent_list.SetSelection(item)
+
         menu = wx.Menu()
         use_item = menu.Append(wx.ID_ANY, "Use Message")
         copy_item = menu.Append(wx.ID_COPY, "Copy Message")
@@ -535,27 +542,27 @@ class BaseComPanel(wx.Panel):
         self.Bind(wx.EVT_MENU, self.on_copy_context, copy_item)
         self.Bind(wx.EVT_MENU, self.on_delete_context, del_item)
 
-        self.PopupMenu(menu)
+        self.recent_list.PopupMenu(menu, event.GetPosition())
         menu.Destroy()
 
     def on_use_context(self, event):
-        item = self.recent_list.GetNextItem(-1, wx.LIST_NEXT_ALL, wx.LIST_STATE_SELECTED)
-        if item != -1:
-            self.send_txt.SetValue(self.recent_list.GetItemText(item))
+        selection = self.recent_list.GetSelection()
+        if selection != wx.NOT_FOUND:
+            self.send_txt.SetValue(self.recent_messages[selection])
 
     def on_copy_context(self, event):
-        item = self.recent_list.GetNextItem(-1, wx.LIST_NEXT_ALL, wx.LIST_STATE_SELECTED)
-        if item != -1:
-            text = self.recent_list.GetItemText(item)
+        selection = self.recent_list.GetSelection()
+        if selection != wx.NOT_FOUND:
             if wx.TheClipboard.Open():
-                wx.TheClipboard.SetData(wx.TextDataObject(text))
+                wx.TheClipboard.SetData(wx.TextDataObject(self.recent_messages[selection]))
                 wx.TheClipboard.Close()
 
     def on_delete_context(self, event):
-        item = self.recent_list.GetNextItem(-1, wx.LIST_NEXT_ALL, wx.LIST_STATE_SELECTED)
-        if item != -1:
-            msg = self.recent_list.GetItemText(item)
-            self.recent_list.DeleteItem(item)
+        selection = self.recent_list.GetSelection()
+        if selection != wx.NOT_FOUND:
+            msg = self.recent_messages[selection]
+            self.recent_messages.pop(selection)
+            self.recent_list.Delete(selection)
             Config.remove_from_list(self.recent_msgs_key, msg)
 
 
@@ -574,6 +581,7 @@ class RequesterPanel(BaseComPanel):
 class ReplyerPanel(wx.Panel):
     def __init__(self, parent):
         super().__init__(parent)
+        self.recent_messages = []  # Store original messages
 
         # Extract port from config (remove tcp://*: prefix if present)
         default_addr = Config.get(CONFIG_REPLYER_ADDRESS_KEY, "tcp://*:5555")
@@ -617,8 +625,9 @@ class ReplyerPanel(wx.Panel):
         # Recent panel (in vertical splitter)
         self.recent_panel = wx.Panel(self.v_splitter)
         self.recent_sizer = wx.BoxSizer(wx.VERTICAL)
-        self.recent_list = wx.ListCtrl(self.recent_panel, style=wx.LC_REPORT)
-        self.recent_list.InsertColumn(0, "Recently Sent Messages", width=450)
+        self.recent_lbl = wx.StaticText(self.recent_panel, label="Recent Messages:")
+        self.recent_list = wx.ListBox(self.recent_panel)
+        self.recent_sizer.Add(self.recent_lbl, 0, wx.EXPAND | wx.LEFT | wx.TOP, 5)
         self.recent_sizer.Add(self.recent_list, 1, wx.EXPAND)
         self.recent_panel.SetSizer(self.recent_sizer)
 
@@ -664,8 +673,8 @@ class ReplyerPanel(wx.Panel):
         # Bindings
         self.bind_toggle_btn.Bind(wx.EVT_BUTTON, self.on_bind_toggle)
         self.send_btn.Bind(wx.EVT_BUTTON, self.on_send_message)
-        self.recent_list.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_recent_selected)
-        self.recent_list.Bind(wx.EVT_LIST_ITEM_RIGHT_CLICK, self.on_recent_right_click)
+        self.recent_list.Bind(wx.EVT_LISTBOX_DCLICK, self.on_recent_selected)
+        self.recent_list.Bind(wx.EVT_RIGHT_DOWN, self.on_recent_right_click)
         self.Bind(wx.EVT_SIZE, self.on_size)
 
         self._splitters_initialized = False
@@ -691,10 +700,15 @@ class ReplyerPanel(wx.Panel):
         if v_size > 0:
             self.v_splitter.SetSashPosition(v_size // 2)
 
+    def _to_single_line(self, msg):
+        """Convert a message to single line for display."""
+        return " ".join(msg.split())
+
     def load_recent_messages(self):
         msgs = Config.get_list(CONFIG_RECENT_SENT_MSGS_REP_KEY)
-        for msg in msgs:
-            self.recent_list.InsertItem(0, msg)
+        for msg in reversed(msgs):
+            self.recent_messages.insert(0, msg)
+            self.recent_list.Insert(self._to_single_line(msg), 0)
 
     def on_bind_toggle(self, event):
         if self.is_bound:
@@ -745,14 +759,9 @@ class ReplyerPanel(wx.Panel):
         self.send_reply(message)
 
         # Add to recent
-        found = False
-        for i in range(self.recent_list.GetItemCount()):
-            if self.recent_list.GetItemText(i) == message:
-                found = True
-                break
-
-        if not found:
-            self.recent_list.InsertItem(0, message)
+        if message not in self.recent_messages:
+            self.recent_messages.insert(0, message)
+            self.recent_list.Insert(self._to_single_line(message), 0)
             Config.add_to_list(CONFIG_RECENT_SENT_MSGS_REP_KEY, message)
 
     def recv_message(self, message):
@@ -773,11 +782,16 @@ class ReplyerPanel(wx.Panel):
             self.recv_txt.SetValue(str(message))
 
     def on_recent_selected(self, event):
-        item = event.GetIndex()
-        if item != -1:
-            self.send_txt.SetValue(self.recent_list.GetItemText(item))
+        selection = self.recent_list.GetSelection()
+        if selection != wx.NOT_FOUND:
+            self.send_txt.SetValue(self.recent_messages[selection])
 
     def on_recent_right_click(self, event):
+        # Select item under cursor
+        item = self.recent_list.HitTest(event.GetPosition())
+        if item != wx.NOT_FOUND:
+            self.recent_list.SetSelection(item)
+
         menu = wx.Menu()
         use_item = menu.Append(wx.ID_ANY, "Use Message")
         copy_item = menu.Append(wx.ID_COPY, "Copy Message")
@@ -787,27 +801,27 @@ class ReplyerPanel(wx.Panel):
         self.Bind(wx.EVT_MENU, self.on_copy_context, copy_item)
         self.Bind(wx.EVT_MENU, self.on_delete_context, del_item)
 
-        self.PopupMenu(menu)
+        self.recent_list.PopupMenu(menu, event.GetPosition())
         menu.Destroy()
 
     def on_use_context(self, event):
-        item = self.recent_list.GetNextItem(-1, wx.LIST_NEXT_ALL, wx.LIST_STATE_SELECTED)
-        if item != -1:
-            self.send_txt.SetValue(self.recent_list.GetItemText(item))
+        selection = self.recent_list.GetSelection()
+        if selection != wx.NOT_FOUND:
+            self.send_txt.SetValue(self.recent_messages[selection])
 
     def on_copy_context(self, event):
-        item = self.recent_list.GetNextItem(-1, wx.LIST_NEXT_ALL, wx.LIST_STATE_SELECTED)
-        if item != -1:
-            text = self.recent_list.GetItemText(item)
+        selection = self.recent_list.GetSelection()
+        if selection != wx.NOT_FOUND:
             if wx.TheClipboard.Open():
-                wx.TheClipboard.SetData(wx.TextDataObject(text))
+                wx.TheClipboard.SetData(wx.TextDataObject(self.recent_messages[selection]))
                 wx.TheClipboard.Close()
 
     def on_delete_context(self, event):
-        item = self.recent_list.GetNextItem(-1, wx.LIST_NEXT_ALL, wx.LIST_STATE_SELECTED)
-        if item != -1:
-            msg = self.recent_list.GetItemText(item)
-            self.recent_list.DeleteItem(item)
+        selection = self.recent_list.GetSelection()
+        if selection != wx.NOT_FOUND:
+            msg = self.recent_messages[selection]
+            self.recent_messages.pop(selection)
+            self.recent_list.Delete(selection)
             Config.remove_from_list(CONFIG_RECENT_SENT_MSGS_REP_KEY, msg)
 
     def on_request_received(self, message):
@@ -822,6 +836,7 @@ class ReplyerPanel(wx.Panel):
 class PublisherPanel(wx.Panel):
     def __init__(self, parent):
         super().__init__(parent)
+        self.recent_messages = []  # Store original messages
 
         self.main_sizer = wx.BoxSizer(wx.VERTICAL)
         self.is_bound = False
@@ -858,8 +873,9 @@ class PublisherPanel(wx.Panel):
         # Recent List Panel
         self.recent_panel = wx.Panel(self.splitter)
         self.recent_sizer = wx.BoxSizer(wx.VERTICAL)
-        self.recent_list = wx.ListCtrl(self.recent_panel, style=wx.LC_REPORT)
-        self.recent_list.InsertColumn(0, "Recently Published Messages", width=500)
+        self.recent_lbl = wx.StaticText(self.recent_panel, label="Recent Messages:")
+        self.recent_list = wx.ListBox(self.recent_panel)
+        self.recent_sizer.Add(self.recent_lbl, 0, wx.EXPAND | wx.LEFT | wx.TOP, 5)
         self.recent_sizer.Add(self.recent_list, 1, wx.EXPAND)
         self.recent_panel.SetSizer(self.recent_sizer)
 
@@ -880,8 +896,8 @@ class PublisherPanel(wx.Panel):
 
         self.bind_toggle_btn.Bind(wx.EVT_BUTTON, self.on_bind_toggle)
         self.pub_btn.Bind(wx.EVT_BUTTON, self.on_publish)
-        self.recent_list.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_recent_selected)
-        self.recent_list.Bind(wx.EVT_LIST_ITEM_RIGHT_CLICK, self.on_recent_right_click)
+        self.recent_list.Bind(wx.EVT_LISTBOX_DCLICK, self.on_recent_selected)
+        self.recent_list.Bind(wx.EVT_RIGHT_DOWN, self.on_recent_right_click)
         self.Bind(wx.EVT_SIZE, self.on_size)
 
         self._splitter_initialized = False
@@ -932,10 +948,15 @@ class PublisherPanel(wx.Panel):
             else:
                 wx.MessageBox(message, "Bind Error", wx.OK | wx.ICON_ERROR)
 
+    def _to_single_line(self, msg):
+        """Convert a message to single line for display."""
+        return " ".join(msg.split())
+
     def load_recent(self):
         msgs = Config.get_list(CONFIG_RECENT_SENT_MSGS_PUB_KEY)
-        for msg in msgs:
-            self.recent_list.InsertItem(0, msg)
+        for msg in reversed(msgs):
+            self.recent_messages.insert(0, msg)
+            self.recent_list.Insert(self._to_single_line(msg), 0)
 
     def on_publish(self, event):
         topic = self.topic_txt.GetValue().strip()
@@ -963,21 +984,22 @@ class PublisherPanel(wx.Panel):
         Config.set(CONFIG_PUBLISHER_TOPIC_KEY, topic)
 
         # Add to recent
-        found = False
-        for i in range(self.recent_list.GetItemCount()):
-            if self.recent_list.GetItemText(i) == message:
-                found = True
-                break
-        if not found:
-            self.recent_list.InsertItem(0, message)
+        if message not in self.recent_messages:
+            self.recent_messages.insert(0, message)
+            self.recent_list.Insert(self._to_single_line(message), 0)
             Config.add_to_list(CONFIG_RECENT_SENT_MSGS_PUB_KEY, message)
 
     def on_recent_selected(self, event):
-        item = event.GetIndex()
-        if item != -1:
-            self.msg_txt.SetValue(self.recent_list.GetItemText(item))
+        selection = self.recent_list.GetSelection()
+        if selection != wx.NOT_FOUND:
+            self.msg_txt.SetValue(self.recent_messages[selection])
 
     def on_recent_right_click(self, event):
+        # Select item under cursor
+        item = self.recent_list.HitTest(event.GetPosition())
+        if item != wx.NOT_FOUND:
+            self.recent_list.SetSelection(item)
+
         menu = wx.Menu()
         use_item = menu.Append(wx.ID_ANY, "Use Message")
         copy_item = menu.Append(wx.ID_COPY, "Copy Message")
@@ -987,27 +1009,27 @@ class PublisherPanel(wx.Panel):
         self.Bind(wx.EVT_MENU, self.on_copy_context, copy_item)
         self.Bind(wx.EVT_MENU, self.on_delete_context, del_item)
 
-        self.PopupMenu(menu)
+        self.recent_list.PopupMenu(menu, event.GetPosition())
         menu.Destroy()
 
     def on_use_context(self, event):
-        item = self.recent_list.GetNextItem(-1, wx.LIST_NEXT_ALL, wx.LIST_STATE_SELECTED)
-        if item != -1:
-            self.msg_txt.SetValue(self.recent_list.GetItemText(item))
+        selection = self.recent_list.GetSelection()
+        if selection != wx.NOT_FOUND:
+            self.msg_txt.SetValue(self.recent_messages[selection])
 
     def on_copy_context(self, event):
-        item = self.recent_list.GetNextItem(-1, wx.LIST_NEXT_ALL, wx.LIST_STATE_SELECTED)
-        if item != -1:
-            text = self.recent_list.GetItemText(item)
+        selection = self.recent_list.GetSelection()
+        if selection != wx.NOT_FOUND:
             if wx.TheClipboard.Open():
-                wx.TheClipboard.SetData(wx.TextDataObject(text))
+                wx.TheClipboard.SetData(wx.TextDataObject(self.recent_messages[selection]))
                 wx.TheClipboard.Close()
 
     def on_delete_context(self, event):
-        item = self.recent_list.GetNextItem(-1, wx.LIST_NEXT_ALL, wx.LIST_STATE_SELECTED)
-        if item != -1:
-            msg = self.recent_list.GetItemText(item)
-            self.recent_list.DeleteItem(item)
+        selection = self.recent_list.GetSelection()
+        if selection != wx.NOT_FOUND:
+            msg = self.recent_messages[selection]
+            self.recent_messages.pop(selection)
+            self.recent_list.Delete(selection)
             Config.remove_from_list(CONFIG_RECENT_SENT_MSGS_PUB_KEY, msg)
 
 
