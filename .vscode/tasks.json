@@ -1,76 +1,46 @@
 {
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "Build App",
-            "type": "shell",
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "command": [
-                "chmod -R 777 ./scripts/;",
-                "./scripts/build.sh"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}/"
-            },
-            "problemMatcher": "$gcc",
-            "runOptions": {"reevaluateOnRerun": false},
-        },
-        {
-            "label": "Run App",
-            "type": "shell",
-            "group": "test",
-            "command": [
-                "chmod -R 777 ./scripts/;",
-                "./scripts/run.sh"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}/"
-            },
-            "runOptions": {"reevaluateOnRerun": false},
-        },
-        {
-            "label": "Clean App",
-            "type": "shell",
-            "group": "test",
-            "command": [
-                "chmod -R 777 ./scripts/;",
-                "./scripts/clean.sh"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}/"
-            },
-            "runOptions": {"reevaluateOnRerun": false},
-        },
-        {
-        "label": "Install App",
-        "type": "shell",
-        "group": {
-            "kind": "build",
-            "isDefault": true
-        },
-        "command": ["chmod -R 777 ./scripts/;", "sudo ./scripts/install.sh"],
-        "options": {
-            "cwd": "${workspaceFolder}/"
-        },
-        "problemMatcher": "$gcc",
-        "runOptions": { "reevaluateOnRerun": false }
-        },
-        {
-        "label": "Uninstall App",
-        "type": "shell",
-        "group": {
-            "kind": "build",
-            "isDefault": true
-        },
-        "command": ["chmod -R 777 ./scripts/;", "sudo ./scripts/uninstall.sh"],
-        "options": {
-            "cwd": "${workspaceFolder}/"
-        },
-        "problemMatcher": "$gcc",
-        "runOptions": { "reevaluateOnRerun": false }
-        }
-    ]
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run App",
+      "type": "shell",
+      "command": "${command:python.interpreterPath}",
+      "args": ["zmq_analyzer.py"],
+      "group": "test",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Install App",
+      "type": "shell",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "command": ["chmod +x ./install.sh;", "sudo ./install.sh"],
+      "options": {
+        "cwd": "${workspaceFolder}/"
+      },
+      "problemMatcher": "$gcc",
+      "runOptions": { "reevaluateOnRerun": false }
+    },
+    {
+      "label": "Uninstall App",
+      "type": "shell",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "command": ["chmod +x ./uninstall.sh;", "sudo ./uninstall.sh"],
+      "options": {
+        "cwd": "${workspaceFolder}/"
+      },
+      "problemMatcher": "$gcc",
+      "runOptions": { "reevaluateOnRerun": false }
+    }
+  ]
 }
