@@ -1,5 +1,8 @@
 #pragma once
 
+#include <atomic>
+#include <functional>
+#include <memory>
 #include <string>
 #include <zmq.hpp>
 
@@ -12,15 +15,22 @@ public:
 
   ~Requester();
 
-  std::string request(const std::string &message, const std::string &connectionAddress);
+  void request(const std::string &message, const std::string &connectionAddress);
 
   std::string getConnectionAddress() const { return m_connectionAddress; }
+
+  void setOnReceivedCallback(const std::function<void(const std::string &)> &callback) {
+    m_onReceivedCallback = callback;
+  }
 
 private:
   Requester();
   void resetSocket();
 
   std::string m_connectionAddress;
-  zmq::context_t *m_context;
-  zmq::socket_t *m_socket;
+  std::shared_ptr<zmq::context_t> m_context;
+  std::shared_ptr<zmq::socket_t> m_socket;
+
+  std::function<void(const std::string &)> m_onReceivedCallback;
+  std::shared_ptr<std::atomic<bool>> m_isRequesting;
 };

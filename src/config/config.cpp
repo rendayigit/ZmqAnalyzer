@@ -17,9 +17,11 @@ void Config::createConfigFileIfNotExists() {
 
   // Create default config
   nlohmann::json defaultConfig = {{"requester_address", "tcp://localhost:4001"},
+                                  {"replyer_address", "tcp://localhost:4001"},
                                   {"subscriber_address", "tcp://localhost:4002"},
                                   {"publisher_port", "4002"},
                                   {"requester_recent_messages", {""}},
+                                  {"replyer_recent_messages", {""}},
                                   {"publisher_recent_messages", {""}},
                                   {"subscriber_last_topic", "TOPIC"},
                                   {"publisher_last_topic", "TOPIC"}};

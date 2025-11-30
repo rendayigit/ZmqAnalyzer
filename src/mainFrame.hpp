@@ -18,6 +18,7 @@ private:
   wxNotebook *notebook;
   wxPanel *subscriber;
   wxPanel *requester;
+  wxPanel *replyer;
   wxPanel *publisher;
   wxBoxSizer *sizer;
 };

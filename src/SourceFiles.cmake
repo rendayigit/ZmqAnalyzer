@@ -12,6 +12,8 @@ set(SOURCEFILES
     ${CMAKE_CURRENT_LIST_DIR}/requester/requester.cpp
     ${CMAKE_CURRENT_LIST_DIR}/publisher/publisherPanel.cpp
     ${CMAKE_CURRENT_LIST_DIR}/publisher/publisher.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/replyer/replyerPanel.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/replyer/replyer.cpp
 )
 
 set(INCLUDEDIRS
