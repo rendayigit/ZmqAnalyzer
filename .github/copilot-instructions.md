@@ -8,6 +8,9 @@ ZmqAnalyzer is a Python desktop application acting as a "Postman for ZeroMQ". It
 - **REQ/REP**: Request/Reply - synchronous RPC-style communication
 - **PUSH/PULL**: Pipeline - task distribution with load balancing
 - **DEALER/ROUTER**: Advanced async request/reply - handle multiple clients without blocking
+- **CLIENT/SERVER**: Thread-safe async request/reply (draft API)
+- **RADIO/DISH**: Group-based multicast messaging (draft API)
+- **SCATTER/GATHER**: Round-robin distribution with fair-queued collection (draft API)
 - **PAIR**: Exclusive pair - simple 1:1 bidirectional connection
 - **XPUB/XSUB**: Extended PUB/SUB - for building brokers, shows subscription events
 - **STREAM**: Raw TCP - connect to non-ZMQ peers (HTTP servers, etc.)
@@ -26,18 +29,28 @@ ZmqAnalyzer is a Python desktop application acting as a "Postman for ZeroMQ". It
   - `PullerPanel`: Standalone panel for PULL pattern with connect and message statistics.
   - `DealerPanel`: Standalone panel for DEALER pattern with async send/receive.
   - `RouterPanel`: Standalone panel for ROUTER pattern with port-based binding.
+  - `ClientPanel`: Standalone panel for CLIENT pattern (draft API) with async send/receive.
+  - `ServerPanel`: Standalone panel for SERVER pattern (draft API) with port-based binding.
+  - `RadioPanel`: Standalone panel for RADIO pattern (draft API) with group-based broadcast.
+  - `DishPanel`: Standalone panel for DISH pattern (draft API) with group-based receive.
+  - `ScatterPanel`: Standalone panel for SCATTER pattern (draft API) with round-robin distribution.
+  - `GatherPanel`: Standalone panel for GATHER pattern (draft API) with fair-queued receive.
   - `PairPanel`: Standalone panel for PAIR pattern with bind/connect mode selection.
   - `XPublisherPanel`: Standalone panel for XPUB pattern with subscription event display.
   - `XSubscriberPanel`: Standalone panel for XSUB pattern with explicit subscription control.
   - `StreamPanel`: Standalone panel for STREAM pattern for raw TCP connections.
-  - `TopicFrame`: Popup window for viewing individual topic messages in Subscriber.
+  - `TopicFrame`: Popup window for viewing individual topic messages in Subscriber/XSubscriber.
+- **Mixins**:
+  - `RecentMessagesMixin`: Provides recent messages functionality (load/save, double-click to use, right-click context menu).
+  - `SplitterInitMixin`: Handles splitter initialization on panel size events (avoids code duplication across panels).
 - **ZMQ Logic**:
-  - Encapsulated in Singleton classes (`Publisher`, `Subscriber`, `Requester`, `Replyer`, `Pusher`, `Puller`, `Dealer`, `Router`, `PairSocket`, `XPublisher`, `XSubscriber`, `StreamSocket`).
+  - Encapsulated in Singleton classes (`Publisher`, `Subscriber`, `Requester`, `Replyer`, `Pusher`, `Puller`, `Dealer`, `Router`, `Client`, `Server`, `Radio`, `Dish`, `Scatter`, `Gather`, `PairSocket`, `XPublisher`, `XSubscriber`, `StreamSocket`).
   - Uses `pyzmq` for ZeroMQ interactions.
   - Threading is used for receiving messages to avoid blocking the UI.
   - `wx.CallAfter` is used to update UI from background threads.
   - Timer-based throttling in `TopicFrame` to handle rapid message updates.
   - Send timeouts used where appropriate (e.g., PAIR socket) to prevent blocking.
+  - Draft API sockets (CLIENT, SERVER, RADIO, DISH, SCATTER, GATHER) use Frame objects for routing_id and group handling.
 
 ### Data Flow
 1. **User Action**: User clicks "Bind"/"Unbind", "Start"/"Stop", or "Send"/"Publish".

@@ -16,6 +16,9 @@ A desktop GUI application for testing and debugging ZeroMQ messaging — like Po
 | **REQ/REP** | Request/Reply - synchronous RPC-style communication |
 | **PUSH/PULL** | Pipeline - task distribution with load balancing |
 | **DEALER/ROUTER** | Advanced async request/reply - handle multiple clients without blocking |
+| **CLIENT/SERVER** | Thread-safe async request/reply (draft API) |
+| **RADIO/DISH** | Group-based multicast messaging (draft API) |
+| **SCATTER/GATHER** | Round-robin distribution with fair-queued collection (draft API) |
 | **PAIR** | Exclusive pair - simple 1:1 bidirectional connection |
 | **XPUB/XSUB** | Extended PUB/SUB - for building brokers, shows subscription events |
 | **STREAM** | Raw TCP - connect to non-ZMQ peers (HTTP servers, etc.) |
@@ -130,6 +133,51 @@ sudo ./uninstall.sh
 2. Enter **Topics** to filter (comma-separated, leave empty for all)
 3. Click **Start** to begin receiving messages
 4. Works like Subscriber but with explicit subscription control
+
+### Client Tab (CLIENT - Draft API)
+
+1. Enter the server **Address** (e.g., `tcp://localhost:5555`)
+2. Click **Connect** to establish connection
+3. Type your **Message** and click **Send**
+4. Replies from the server appear in the received panel
+5. Unlike REQ, you can send multiple messages without waiting for replies
+
+### Server Tab (SERVER - Draft API)
+
+1. Enter a **Port** number (e.g., `5555`)
+2. Click **Bind** to start listening
+3. Incoming requests from clients appear automatically
+4. Type a **Reply** and click **Send** to respond
+5. Unlike REP, can handle multiple clients asynchronously
+
+### Radio Tab (RADIO - Draft API)
+
+1. Enter a **Port** number (e.g., `5556`)
+2. Click **Bind** to start the radio broadcaster
+3. Enter a **Group** name (e.g., `weather`, `news`)
+4. Type your **Message** and click **Broadcast**
+5. Messages are sent only to dishes that joined that group
+
+### Dish Tab (DISH - Draft API)
+
+1. Enter the radio **Address** (e.g., `tcp://localhost:5556`)
+2. Enter **Groups** to join (comma-separated, e.g., `weather,news`)
+3. Click **Start** to begin receiving messages
+4. Only messages sent to your joined groups will be received
+
+### Scatter Tab (SCATTER - Draft API)
+
+1. Enter a **Port** number (e.g., `5557`)
+2. Click **Bind** to start the scatter distributor
+3. Type your **Message** and click **Scatter**
+4. Messages are distributed round-robin to connected gatherers
+
+### Gather Tab (GATHER - Draft API)
+
+1. Enter the scatter **Address** (e.g., `tcp://localhost:5557`)
+2. Click **Start** to begin receiving messages
+3. Messages are fair-queued from all connected scatterers
+4. Statistics show message count, data size, and speed
 
 ### Stream Tab (STREAM)
 
