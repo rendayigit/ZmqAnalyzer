@@ -2211,6 +2211,7 @@ class PullerPanel(wx.Panel):
         super().__init__(parent)
         self.is_running = False
         self.message_count = 0
+        self.total_bytes = 0
         self.start_time = None
 
         self.main_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -2250,21 +2251,25 @@ class PullerPanel(wx.Panel):
         stats_header.SetFont(wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
         self.stats_sizer.Add(stats_header, 0, wx.ALL, 5)
 
-        stats_grid = wx.FlexGridSizer(2, 3, 5, 20)
-        for i in range(3):
+        stats_grid = wx.FlexGridSizer(2, 5, 5, 20)
+        for i in range(5):
             stats_grid.AddGrowableCol(i, 1)
 
-        for label in ["Messages", "Rate", "Running Time"]:
+        for label in ["Messages", "Data Size", "Rate", "Speed", "Running Time"]:
             lbl = wx.StaticText(self.stats_panel, label=label)
             lbl.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
             stats_grid.Add(lbl, 0, wx.ALIGN_CENTER)
 
         self.stats_msgs = wx.StaticText(self.stats_panel, label="0")
+        self.stats_bytes = wx.StaticText(self.stats_panel, label="0 bytes")
         self.stats_rate = wx.StaticText(self.stats_panel, label="-")
+        self.stats_speed = wx.StaticText(self.stats_panel, label="-")
         self.stats_time = wx.StaticText(self.stats_panel, label="-")
 
         stats_grid.Add(self.stats_msgs, 0, wx.ALIGN_CENTER)
+        stats_grid.Add(self.stats_bytes, 0, wx.ALIGN_CENTER)
         stats_grid.Add(self.stats_rate, 0, wx.ALIGN_CENTER)
+        stats_grid.Add(self.stats_speed, 0, wx.ALIGN_CENTER)
         stats_grid.Add(self.stats_time, 0, wx.ALIGN_CENTER)
 
         self.stats_sizer.Add(stats_grid, 0, wx.EXPAND | wx.ALL, 5)
@@ -2315,6 +2320,7 @@ class PullerPanel(wx.Panel):
                 self.is_running = True
                 self.start_time = time.time()
                 self.message_count = 0
+                self.total_bytes = 0
                 self.toggle_btn.SetLabel("Stop")
                 self.addr_txt.Enable(False)
             else:
@@ -2322,17 +2328,20 @@ class PullerPanel(wx.Panel):
 
     def on_message_received(self, message):
         self.message_count += 1
-        msg_str = json.dumps(message, indent=2) if isinstance(message, dict) else str(message)
+        msg_str = json.dumps(message) if isinstance(message, dict) else str(message)
+        self.total_bytes += len(msg_str.encode("utf-8"))
         self.msg_list.AppendItem([str(self.message_count), msg_str])
         self.update_stats()
 
     def update_stats(self):
         self.stats_msgs.SetLabel(str(self.message_count))
+        self.stats_bytes.SetLabel(format_bytes(self.total_bytes))
         if self.start_time:
             elapsed = time.time() - self.start_time
             if elapsed > 0:
                 rate = self.message_count / elapsed
                 self.stats_rate.SetLabel(f"{rate:.2f} msg/s")
+                self.stats_speed.SetLabel(format_speed(self.total_bytes / elapsed))
                 mins, secs = divmod(int(elapsed), 60)
                 self.stats_time.SetLabel(f"{mins}m {secs}s")
 
@@ -3022,6 +3031,7 @@ class XSubscriberPanel(wx.Panel):
     def __init__(self, parent):
         super().__init__(parent)
         self.is_running = False
+        self.topic_frames = {}  # {topic: TopicFrame}
         self.topic_stats = {}  # {topic: {"count": int, "bytes": int, "first_time": float, "last_time": float}}
         self.start_time = None
 
@@ -3130,6 +3140,7 @@ class XSubscriberPanel(wx.Panel):
 
         self.toggle_btn.Bind(wx.EVT_BUTTON, self.on_toggle)
         self.reset_stats_btn.Bind(wx.EVT_BUTTON, self.on_reset_stats)
+        self.msg_list.Bind(wx.dataview.EVT_DATAVIEW_ITEM_ACTIVATED, self.on_item_activated)
         self.msg_list.Bind(wx.dataview.EVT_DATAVIEW_ITEM_CONTEXT_MENU, self.on_msg_list_right_click)
         self.Bind(wx.EVT_SIZE, self.on_size)
 
@@ -3237,7 +3248,7 @@ class XSubscriberPanel(wx.Panel):
 
     def on_message_received(self, topic, message):
         current_time = time.time()
-        msg_str = json.dumps(message, indent=2) if isinstance(message, dict) else str(message)
+        msg_str = json.dumps(message) if isinstance(message, dict) else str(message)
         msg_bytes = len(msg_str.encode("utf-8"))
 
         if topic not in self.topic_stats:
@@ -3257,9 +3268,28 @@ class XSubscriberPanel(wx.Panel):
         if not found:
             self.msg_list.AppendItem([topic, msg_str])
 
+        # Update topic frame if exists
+        if topic in self.topic_frames:
+            if self.topic_frames[topic]:
+                self.topic_frames[topic].update_message(message)
+            else:
+                del self.topic_frames[topic]
+
         # Update stats display
         self.update_topic_stats_display(topic)
         self.update_summary_stats()
+
+    def on_item_activated(self, event):
+        selection = self.msg_list.GetSelectedRow()
+        if selection != wx.NOT_FOUND:
+            topic = self.msg_list.GetTextValue(selection, 0)
+            msg_str = self.msg_list.GetTextValue(selection, 1)
+
+            if topic not in self.topic_frames or not self.topic_frames[topic]:
+                self.topic_frames[topic] = TopicFrame(self, topic)
+
+            self.topic_frames[topic].update_message(msg_str)
+            self.topic_frames[topic].Raise()
 
     def on_msg_list_right_click(self, event):
         menu = wx.Menu()
