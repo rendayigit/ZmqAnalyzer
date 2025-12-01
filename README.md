@@ -45,6 +45,9 @@ cd ZmqAnalyzer
 # Install dependencies
 pip install -r requirements.txt
 
+# Install dependencies (alternative, using apt)
+sudo apt install -y wxpython-tools python3-zmq
+
 # Run the application
 python zmq_analyzer.py
 ```
