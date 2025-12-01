@@ -189,8 +189,24 @@ class Subscriber:
             cls._instance.thread = None
             cls._instance.callback = None
             cls._instance.latest_messages = {}
+            cls._instance.topic_stats = {}
             cls._instance.lock = threading.Lock()
         return cls._instance
+
+    def get_stats(self):
+        """Get a copy of current statistics (thread-safe)."""
+        with self.lock:
+            return {topic: stats.copy() for topic, stats in self.topic_stats.items()}
+
+    def get_messages(self):
+        """Get a copy of latest messages (thread-safe)."""
+        with self.lock:
+            return {topic: msg for topic, msg in self.latest_messages.items()}
+
+    def reset_stats(self):
+        """Reset statistics (thread-safe)."""
+        with self.lock:
+            self.topic_stats = {}
 
     def start(self, topics, address):
         """Start subscribing to topics at the specified address."""
@@ -235,16 +251,27 @@ class Subscriber:
                         topic = parts[0].decode("utf-8")
                         message = parts[1].decode("utf-8")
 
-                        with self.lock:
-                            self.latest_messages[topic] = message
+                        # Parse JSON if possible
+                        try:
+                            msg_data = json.loads(message)
+                        except json.JSONDecodeError:
+                            msg_data = message
 
-                        if self.callback:
-                            # Try to parse JSON
-                            try:
-                                msg_json = json.loads(message)
-                                wx.CallAfter(self.callback, topic, msg_json)
-                            except json.JSONDecodeError:
-                                wx.CallAfter(self.callback, topic, message)
+                        # Update internal state (thread-safe)
+                        with self.lock:
+                            current_time = time.time()
+                            msg_str = json.dumps(msg_data) if isinstance(msg_data, dict) else str(msg_data)
+                            msg_bytes = len(msg_str.encode("utf-8"))
+
+                            # Store latest message
+                            self.latest_messages[topic] = msg_data
+
+                            # Update statistics
+                            if topic not in self.topic_stats:
+                                self.topic_stats[topic] = {"count": 0, "bytes": 0, "first_time": current_time, "last_time": current_time}
+                            self.topic_stats[topic]["count"] += 1
+                            self.topic_stats[topic]["bytes"] += msg_bytes
+                            self.topic_stats[topic]["last_time"] = current_time
             except zmq.ZMQError:
                 break
             except Exception as e:
@@ -474,6 +501,13 @@ class Puller:
             cls._instance.thread = None
             cls._instance.callback = None
             cls._instance.lock = threading.Lock()
+            # Internal state for throttled UI updates
+            cls._instance.message_count = 0
+            cls._instance.total_bytes = 0
+            cls._instance.start_time = None
+            cls._instance.latest_message = None
+            cls._instance.messages_buffer = []  # Buffer recent messages for display
+            cls._instance.max_buffer_size = 100  # Keep last 100 messages
         return cls._instance
 
     def start(self, address):
@@ -484,6 +518,11 @@ class Puller:
             self.socket = self.context.socket(zmq.PULL)
             self.socket.connect(address)
             self.running = True
+            self.message_count = 0
+            self.total_bytes = 0
+            self.start_time = time.time()
+            self.messages_buffer = []
+            self.latest_message = None
             self.thread = threading.Thread(target=self._receive_loop, daemon=True)
             self.thread.start()
             print(f"Puller connected to {address}")
@@ -512,16 +551,42 @@ class Puller:
             try:
                 if self.socket.poll(100):
                     message = self.socket.recv_string()
-                    if self.callback:
+                    with self.lock:
+                        self.message_count += 1
+                        self.total_bytes += len(message.encode("utf-8"))
+                        # Parse JSON if possible
                         try:
-                            msg_json = json.loads(message)
-                            wx.CallAfter(self.callback, msg_json)
+                            msg_parsed = json.loads(message)
                         except json.JSONDecodeError:
-                            wx.CallAfter(self.callback, message)
+                            msg_parsed = message
+                        self.latest_message = msg_parsed
+                        # Add to buffer (keep last N messages)
+                        self.messages_buffer.append((self.message_count, msg_parsed))
+                        if len(self.messages_buffer) > self.max_buffer_size:
+                            self.messages_buffer.pop(0)
             except zmq.ZMQError:
                 break
             except Exception as e:
                 print(f"Puller loop error: {e}")
+
+    def get_stats(self):
+        """Get current statistics."""
+        with self.lock:
+            return {"count": self.message_count, "bytes": self.total_bytes, "start_time": self.start_time}
+
+    def get_new_messages(self, last_count):
+        """Get messages since last_count."""
+        with self.lock:
+            return [(num, msg) for num, msg in self.messages_buffer if num > last_count]
+
+    def reset_stats(self):
+        """Reset statistics and message buffer."""
+        with self.lock:
+            self.message_count = 0
+            self.total_bytes = 0
+            self.start_time = time.time()
+            self.messages_buffer = []
+            self.latest_message = None
 
 
 class Dealer:
@@ -964,8 +1029,25 @@ class XSubscriber:
             cls._instance.running = False
             cls._instance.thread = None
             cls._instance.callback = None
+            cls._instance.latest_messages = {}
+            cls._instance.topic_stats = {}
             cls._instance.lock = threading.Lock()
         return cls._instance
+
+    def get_stats(self):
+        """Get a copy of current statistics (thread-safe)."""
+        with self.lock:
+            return {topic: stats.copy() for topic, stats in self.topic_stats.items()}
+
+    def get_messages(self):
+        """Get a copy of latest messages (thread-safe)."""
+        with self.lock:
+            return {topic: msg for topic, msg in self.latest_messages.items()}
+
+    def reset_stats(self):
+        """Reset statistics (thread-safe)."""
+        with self.lock:
+            self.topic_stats = {}
 
     def start(self, topics, address):
         """Start subscribing to topics at the specified address."""
@@ -1034,12 +1116,27 @@ class XSubscriber:
                         topic = parts[0].decode("utf-8")
                         message = parts[1].decode("utf-8")
 
-                        if self.callback:
-                            try:
-                                msg_json = json.loads(message)
-                                wx.CallAfter(self.callback, topic, msg_json)
-                            except json.JSONDecodeError:
-                                wx.CallAfter(self.callback, topic, message)
+                        # Parse JSON if possible
+                        try:
+                            msg_data = json.loads(message)
+                        except json.JSONDecodeError:
+                            msg_data = message
+
+                        # Update internal state (thread-safe)
+                        with self.lock:
+                            current_time = time.time()
+                            msg_str = json.dumps(msg_data) if isinstance(msg_data, dict) else str(msg_data)
+                            msg_bytes = len(msg_str.encode("utf-8"))
+
+                            # Store latest message
+                            self.latest_messages[topic] = msg_data
+
+                            # Update statistics
+                            if topic not in self.topic_stats:
+                                self.topic_stats[topic] = {"count": 0, "bytes": 0, "first_time": current_time, "last_time": current_time}
+                            self.topic_stats[topic]["count"] += 1
+                            self.topic_stats[topic]["bytes"] += msg_bytes
+                            self.topic_stats[topic]["last_time"] = current_time
             except zmq.ZMQError:
                 break
             except Exception as e:
@@ -1395,6 +1492,15 @@ class Dish:
             cls._instance.running = False
             cls._instance.thread = None
             cls._instance.callback = None
+            cls._instance.lock = threading.Lock()
+            # Internal state for throttled UI updates
+            cls._instance.message_count = 0
+            cls._instance.total_bytes = 0
+            cls._instance.start_time = None
+            cls._instance.latest_message = None
+            cls._instance.latest_group = None
+            cls._instance.messages_buffer = []  # Buffer recent messages
+            cls._instance.max_buffer_size = 50
         return cls._instance
 
     def set_callback(self, callback):
@@ -1410,6 +1516,12 @@ class Dish:
                 if group:
                     self.socket.join(group)
             self.running = True
+            self.message_count = 0
+            self.total_bytes = 0
+            self.start_time = time.time()
+            self.messages_buffer = []
+            self.latest_message = None
+            self.latest_group = None
             self.thread = threading.Thread(target=self._receive_loop, daemon=True)
             self.thread.start()
             print(f"Dish connected to {address}, joined groups: {groups}")
@@ -1439,12 +1551,38 @@ class Dish:
                     frame = self.socket.recv(copy=False)
                     message = bytes(frame.buffer).decode("utf-8", errors="replace")
                     group = frame.group
-                    if self.callback:
-                        wx.CallAfter(self.callback, group, message)
+                    with self.lock:
+                        self.message_count += 1
+                        self.total_bytes += len(message.encode("utf-8"))
+                        self.latest_message = message
+                        self.latest_group = group
+                        self.messages_buffer.append((self.message_count, group, message))
+                        if len(self.messages_buffer) > self.max_buffer_size:
+                            self.messages_buffer.pop(0)
             except zmq.ZMQError:
                 break
             except Exception as e:
                 print(f"Dish receive error: {e}")
+
+    def get_stats(self):
+        """Get current statistics."""
+        with self.lock:
+            return {"count": self.message_count, "bytes": self.total_bytes, "start_time": self.start_time}
+
+    def get_new_messages(self, last_count):
+        """Get messages since last_count."""
+        with self.lock:
+            return [(num, grp, msg) for num, grp, msg in self.messages_buffer if num > last_count]
+
+    def reset_stats(self):
+        """Reset statistics and message buffer."""
+        with self.lock:
+            self.message_count = 0
+            self.total_bytes = 0
+            self.start_time = time.time()
+            self.messages_buffer = []
+            self.latest_message = None
+            self.latest_group = None
 
 
 class Scatter:
@@ -1507,9 +1645,14 @@ class Gather:
             cls._instance.running = False
             cls._instance.thread = None
             cls._instance.callback = None
+            cls._instance.lock = threading.Lock()
+            # Internal state for throttled UI updates
             cls._instance.message_count = 0
             cls._instance.total_bytes = 0
             cls._instance.start_time = None
+            cls._instance.latest_message = None
+            cls._instance.messages_buffer = []
+            cls._instance.max_buffer_size = 50
         return cls._instance
 
     def set_callback(self, callback):
@@ -1524,6 +1667,8 @@ class Gather:
             self.message_count = 0
             self.total_bytes = 0
             self.start_time = time.time()
+            self.messages_buffer = []
+            self.latest_message = None
             self.thread = threading.Thread(target=self._receive_loop, daemon=True)
             self.thread.start()
             print(f"Gather connected to {address}")
@@ -1550,14 +1695,41 @@ class Gather:
             try:
                 if self.socket.poll(100):
                     message = self.socket.recv_string()
-                    self.message_count += 1
-                    self.total_bytes += len(message.encode("utf-8"))
-                    if self.callback:
-                        wx.CallAfter(self.callback, message)
+                    with self.lock:
+                        self.message_count += 1
+                        self.total_bytes += len(message.encode("utf-8"))
+                        # Parse JSON if possible
+                        try:
+                            msg_parsed = json.loads(message)
+                        except json.JSONDecodeError:
+                            msg_parsed = message
+                        self.latest_message = msg_parsed
+                        self.messages_buffer.append((self.message_count, msg_parsed))
+                        if len(self.messages_buffer) > self.max_buffer_size:
+                            self.messages_buffer.pop(0)
             except zmq.ZMQError:
                 break
             except Exception as e:
                 print(f"Gather receive error: {e}")
+
+    def get_stats(self):
+        """Get current statistics."""
+        with self.lock:
+            return {"count": self.message_count, "bytes": self.total_bytes, "start_time": self.start_time}
+
+    def get_new_messages(self, last_count):
+        """Get messages since last_count."""
+        with self.lock:
+            return [(num, msg) for num, msg in self.messages_buffer if num > last_count]
+
+    def reset_stats(self):
+        """Reset statistics and message buffer."""
+        with self.lock:
+            self.message_count = 0
+            self.total_bytes = 0
+            self.start_time = time.time()
+            self.messages_buffer = []
+            self.latest_message = None
 
 
 # --- UI Utility Functions ---
@@ -2109,8 +2281,7 @@ class PublisherPanel(wx.Panel, RecentMessagesMixin, SplitterInitMixin):
 
 
 class TopicFrame(wx.Frame):
-    # Maximum message size to display (100KB)
-    MAX_DISPLAY_SIZE = 100 * 1024
+    """Popup window for viewing individual topic messages with full content."""
 
     def __init__(self, parent, topic):
         super().__init__(parent, title=f"Topic: {topic}", size=(400, 300))
@@ -2122,7 +2293,7 @@ class TopicFrame(wx.Frame):
         self.panel.SetSizer(self.sizer)
         self.Bind(wx.EVT_CLOSE, self.on_close)
 
-        # Throttle updates to avoid UI freezing
+        # Throttle updates to 100ms interval
         self.pending_message = None
         self.update_timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self.on_update_timer, self.update_timer)
@@ -2130,14 +2301,14 @@ class TopicFrame(wx.Frame):
         self.Show()
 
     def update_message(self, message):
-        """Queue a message update (throttled to avoid UI freezing)."""
+        """Queue a message update (throttled to 100ms to avoid UI freezing)."""
         self.pending_message = message
         # Only start timer if not already running
         if not self.update_timer.IsRunning():
-            self.update_timer.StartOnce(50)  # 50ms delay, updates max 20 times/sec
+            self.update_timer.StartOnce(100)  # 100ms delay
 
     def on_update_timer(self, event):
-        """Actually update the display with the pending message."""
+        """Actually update the display with the pending message (no size limit)."""
         if self.pending_message is None:
             return
 
@@ -2157,10 +2328,7 @@ class TopicFrame(wx.Frame):
             else:
                 display_text = str(message)
 
-            # Truncate if too large to prevent UI freeze
-            if len(display_text) > self.MAX_DISPLAY_SIZE:
-                display_text = display_text[: self.MAX_DISPLAY_SIZE] + f"\n\n... [Truncated - message is {len(display_text)} bytes]"
-
+            # No truncation - show full message in detail view
             self.text.SetValue(display_text)
         except Exception as e:
             self.text.SetValue(f"Error displaying message: {e}")
@@ -2172,14 +2340,18 @@ class TopicFrame(wx.Frame):
 
 
 class SubscriberPanel(wx.Panel):
+    # Maximum message length to display in table (truncate longer messages)
+    MAX_TABLE_MSG_LENGTH = 500
+
     def __init__(self, parent):
         super().__init__(parent)
         self.topic_frames = {}
         self.is_running = False
-
-        # Statistics tracking
-        self.topic_stats = {}  # {topic: {"count": int, "bytes": int, "first_time": float, "last_time": float}}
         self.start_time = None
+
+        # UI update timer (10ms interval)
+        self.update_timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self.on_update_timer, self.update_timer)
 
         self.main_sizer = wx.BoxSizer(wx.VERTICAL)
 
@@ -2293,8 +2465,7 @@ class SubscriberPanel(wx.Panel):
         self.Bind(wx.EVT_SIZE, self.on_size)
 
         self._splitter_initialized = False
-
-        Subscriber().set_callback(self.on_message_received)
+        # No callback needed - we poll data via timer
 
     def on_size(self, event):
         event.Skip()
@@ -2324,14 +2495,15 @@ class SubscriberPanel(wx.Panel):
 
     def on_reset_stats(self, event):
         """Reset all statistics."""
-        self.topic_stats = {}
+        Subscriber().reset_stats()
         self.start_time = time.time() if self.is_running else None
         self.stats_list.DeleteAllItems()
-        self.update_summary_stats()
+        self._update_display()
 
     def on_toggle(self, event):
         if self.is_running:
             # Stop
+            self.update_timer.Stop()
             Subscriber().stop()
             self.is_running = False
             self.toggle_btn.SetLabel("Start")
@@ -2362,21 +2534,31 @@ class SubscriberPanel(wx.Panel):
                 self.toggle_btn.SetLabel("Stop")
                 self.addr_txt.Enable(False)
                 self.topic_txt.Enable(False)
+                # Start UI update timer (100ms interval)
+                self.update_timer.Start(100)
                 # Force layout to fix grid alignment
                 wx.CallAfter(self.stats_panel.Layout)
             else:
                 wx.MessageBox(message, "Connection Error", wx.OK | wx.ICON_ERROR)
 
-    def update_summary_stats(self):
-        """Update the summary statistics labels."""
-        total_msgs = sum(s["count"] for s in self.topic_stats.values())
-        total_bytes = sum(s["bytes"] for s in self.topic_stats.values())
-        total_topics = len(self.topic_stats)
+    def on_update_timer(self, event):
+        """Timer callback - update UI with latest data from Subscriber (every 10ms)."""
+        self._update_display()
 
-        # Calculate overall rate and speed
+    def _update_display(self):
+        """Update the UI with current data from the Subscriber singleton."""
+        subscriber = Subscriber()
+        topic_stats = subscriber.get_stats()
+        latest_messages = subscriber.get_messages()
+
+        # Update summary statistics
+        total_msgs = sum(s["count"] for s in topic_stats.values())
+        total_bytes = sum(s["bytes"] for s in topic_stats.values())
+        total_topics = len(topic_stats)
+
         rate_str = "-"
         speed_str = "-"
-        if self.start_time and self.topic_stats:
+        if self.start_time and topic_stats:
             elapsed = time.time() - self.start_time
             if elapsed > 0:
                 rate_str = f"{total_msgs / elapsed:.2f} msg/s"
@@ -2388,79 +2570,64 @@ class SubscriberPanel(wx.Panel):
         self.summary_rate.SetLabel(rate_str)
         self.summary_speed.SetLabel(speed_str)
 
-    def update_topic_stats_display(self, topic):
-        """Update the statistics list for a specific topic."""
-        stats = self.topic_stats.get(topic)
-        if not stats:
-            return
+        # Update per-topic stats and messages
+        for topic, stats in topic_stats.items():
+            # Update stats list
+            elapsed = stats["last_time"] - stats["first_time"]
+            rate_str = f"{stats['count'] / elapsed:.2f}" if elapsed > 0 else "-"
+            bytes_str = format_bytes(stats["bytes"]).replace(" bytes", " B")
+            last_time = time.strftime("%H:%M:%S", time.localtime(stats["last_time"]))
 
-        # Calculate rate
-        elapsed = stats["last_time"] - stats["first_time"]
-        rate_str = f"{stats['count'] / elapsed:.2f}" if elapsed > 0 else "-"
-        bytes_str = format_bytes(stats["bytes"]).replace(" bytes", " B")
-        last_time = time.strftime("%H:%M:%S", time.localtime(stats["last_time"]))
+            found = False
+            for i in range(self.stats_list.GetItemCount()):
+                if self.stats_list.GetTextValue(i, 0) == topic:
+                    self.stats_list.SetTextValue(str(stats["count"]), i, 1)
+                    self.stats_list.SetTextValue(bytes_str, i, 2)
+                    self.stats_list.SetTextValue(rate_str, i, 3)
+                    self.stats_list.SetTextValue(last_time, i, 4)
+                    found = True
+                    break
+            if not found:
+                self.stats_list.AppendItem([topic, str(stats["count"]), bytes_str, rate_str, last_time])
 
-        # Find or add row
-        found = False
-        for i in range(self.stats_list.GetItemCount()):
-            if self.stats_list.GetTextValue(i, 0) == topic:
-                self.stats_list.SetTextValue(str(stats["count"]), i, 1)
-                self.stats_list.SetTextValue(bytes_str, i, 2)
-                self.stats_list.SetTextValue(rate_str, i, 3)
-                self.stats_list.SetTextValue(last_time, i, 4)
-                found = True
-                break
+            # Update message list (truncate to MAX_TABLE_MSG_LENGTH)
+            if topic in latest_messages:
+                message = latest_messages[topic]
+                msg_str = json.dumps(message) if isinstance(message, dict) else str(message)
+                # Truncate for table display
+                if len(msg_str) > self.MAX_TABLE_MSG_LENGTH:
+                    msg_str = msg_str[: self.MAX_TABLE_MSG_LENGTH] + "..."
 
-        if not found:
-            self.stats_list.AppendItem([topic, str(stats["count"]), bytes_str, rate_str, last_time])
+                found = False
+                for i in range(self.msg_list.GetItemCount()):
+                    if self.msg_list.GetTextValue(i, 0) == topic:
+                        self.msg_list.SetTextValue(msg_str, i, 1)
+                        found = True
+                        break
+                if not found:
+                    self.msg_list.AppendItem([topic, msg_str])
 
-    def on_message_received(self, topic, message):
-        # Update statistics
-        current_time = time.time()
-        msg_str = json.dumps(message) if isinstance(message, dict) else str(message)
-        msg_bytes = len(msg_str.encode("utf-8"))
-
-        if topic not in self.topic_stats:
-            self.topic_stats[topic] = {"count": 0, "bytes": 0, "first_time": current_time, "last_time": current_time}
-
-        self.topic_stats[topic]["count"] += 1
-        self.topic_stats[topic]["bytes"] += msg_bytes
-        self.topic_stats[topic]["last_time"] = current_time
-
-        # Update stats display
-        self.update_topic_stats_display(topic)
-        self.update_summary_stats()
-
-        # Update message list
-        # Check if topic exists in list, update it, or add new
-        found = False
-
-        for i in range(self.msg_list.GetItemCount()):
-            if self.msg_list.GetTextValue(i, 0) == topic:
-                self.msg_list.SetTextValue(msg_str, i, 1)
-                found = True
-                break
-
-        if not found:
-            self.msg_list.AppendItem([topic, msg_str])
-
-        # Update topic frame if exists
-        if topic in self.topic_frames:
-            if self.topic_frames[topic]:
-                self.topic_frames[topic].update_message(message)
-            else:
-                del self.topic_frames[topic]
+                # Update topic frame if exists (with full message, no truncation)
+                if topic in self.topic_frames:
+                    frame = self.topic_frames.get(topic)
+                    if frame:
+                        frame.update_message(message)
+                    else:
+                        del self.topic_frames[topic]
 
     def on_item_activated(self, event):
         selection = self.msg_list.GetSelectedRow()
         if selection != wx.NOT_FOUND:
             topic = self.msg_list.GetTextValue(selection, 0)
-            msg_str = self.msg_list.GetTextValue(selection, 1)
+
+            # Get full message from Subscriber (not truncated table version)
+            latest_messages = Subscriber().get_messages()
+            message = latest_messages.get(topic, "")
 
             if topic not in self.topic_frames or not self.topic_frames[topic]:
                 self.topic_frames[topic] = TopicFrame(self, topic)
 
-            self.topic_frames[topic].update_message(msg_str)
+            self.topic_frames[topic].update_message(message)
             self.topic_frames[topic].Raise()
 
 
@@ -2575,12 +2742,17 @@ class PusherPanel(wx.Panel, RecentMessagesMixin, SplitterInitMixin):
 class PullerPanel(wx.Panel, SplitterInitMixin):
     """UI Panel for PULL socket - receives messages from PUSHers."""
 
+    # Maximum message length to display in table
+    MAX_TABLE_MSG_LENGTH = 500
+
     def __init__(self, parent):
         super().__init__(parent)
         self.is_running = False
-        self.message_count = 0
-        self.total_bytes = 0
-        self.start_time = None
+        self.last_displayed_count = 0  # Track last message count displayed
+
+        # UI update timer (100ms interval)
+        self.update_timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self.on_update_timer, self.update_timer)
 
         self.main_sizer = wx.BoxSizer(wx.VERTICAL)
 
@@ -2657,10 +2829,10 @@ class PullerPanel(wx.Panel, SplitterInitMixin):
 
         # Setup mixin with 0.7 ratio
         self.setup_splitter_init(None, self.splitter, v_ratio=0.7)
-        Puller().set_callback(self.on_message_received)
 
     def on_toggle(self, event):
         if self.is_running:
+            self.update_timer.Stop()
             Puller().stop()
             self.is_running = False
             self.toggle_btn.SetLabel("Start")
@@ -2675,30 +2847,40 @@ class PullerPanel(wx.Panel, SplitterInitMixin):
             success, message = Puller().start(addr)
             if success:
                 self.is_running = True
-                self.start_time = time.time()
-                self.message_count = 0
-                self.total_bytes = 0
+                self.last_displayed_count = 0
                 self.toggle_btn.SetLabel("Stop")
                 self.addr_txt.Enable(False)
+                # Start UI update timer (100ms interval)
+                self.update_timer.Start(100)
             else:
                 wx.MessageBox(message, "Connection Error", wx.OK | wx.ICON_ERROR)
 
-    def on_message_received(self, message):
-        self.message_count += 1
-        msg_str = json.dumps(message) if isinstance(message, dict) else str(message)
-        self.total_bytes += len(msg_str.encode("utf-8"))
-        self.msg_list.AppendItem([str(self.message_count), msg_str])
-        self.update_stats()
+    def on_update_timer(self, event):
+        """Timer callback to update UI from Puller's internal state."""
+        puller = Puller()
 
-    def update_stats(self):
-        self.stats_msgs.SetLabel(str(self.message_count))
-        self.stats_bytes.SetLabel(format_bytes(self.total_bytes))
-        if self.start_time:
-            elapsed = time.time() - self.start_time
+        # Get new messages since last update
+        new_messages = puller.get_new_messages(self.last_displayed_count)
+        for num, msg in new_messages:
+            msg_str = json.dumps(msg) if isinstance(msg, dict) else str(msg)
+            # Truncate message for display
+            if len(msg_str) > self.MAX_TABLE_MSG_LENGTH:
+                display_msg = msg_str[: self.MAX_TABLE_MSG_LENGTH] + "..."
+            else:
+                display_msg = msg_str
+            self.msg_list.AppendItem([str(num), display_msg])
+            self.last_displayed_count = num
+
+        # Update statistics
+        stats = puller.get_stats()
+        self.stats_msgs.SetLabel(str(stats["count"]))
+        self.stats_bytes.SetLabel(format_bytes(stats["bytes"]))
+        if stats["start_time"]:
+            elapsed = time.time() - stats["start_time"]
             if elapsed > 0:
-                rate = self.message_count / elapsed
+                rate = stats["count"] / elapsed
                 self.stats_rate.SetLabel(f"{rate:.2f} msg/s")
-                self.stats_speed.SetLabel(format_speed(self.total_bytes / elapsed))
+                self.stats_speed.SetLabel(format_speed(stats["bytes"] / elapsed))
                 mins, secs = divmod(int(elapsed), 60)
                 self.stats_time.SetLabel(f"{mins}m {secs}s")
 
@@ -2711,9 +2893,8 @@ class PullerPanel(wx.Panel, SplitterInitMixin):
 
     def on_clear_messages(self, event):
         self.msg_list.DeleteAllItems()
-        self.message_count = 0
-        self.start_time = time.time() if self.is_running else None
-        self.update_stats()
+        self.last_displayed_count = 0
+        Puller().reset_stats()
 
 
 class DealerPanel(wx.Panel, RecentMessagesMixin, SplitterInitMixin):
@@ -3329,12 +3510,18 @@ class XPublisherPanel(wx.Panel, RecentMessagesMixin, SplitterInitMixin):
 class XSubscriberPanel(wx.Panel):
     """UI Panel for XSUB socket - subscribes with explicit subscription control."""
 
+    # Maximum message length to display in table (truncate longer messages)
+    MAX_TABLE_MSG_LENGTH = 500
+
     def __init__(self, parent):
         super().__init__(parent)
         self.is_running = False
         self.topic_frames = {}  # {topic: TopicFrame}
-        self.topic_stats = {}  # {topic: {"count": int, "bytes": int, "first_time": float, "last_time": float}}
         self.start_time = None
+
+        # UI update timer (10ms interval)
+        self.update_timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self.on_update_timer, self.update_timer)
 
         self.main_sizer = wx.BoxSizer(wx.VERTICAL)
 
@@ -3446,7 +3633,7 @@ class XSubscriberPanel(wx.Panel):
         self.Bind(wx.EVT_SIZE, self.on_size)
 
         self._splitter_initialized = False
-        XSubscriber().set_callback(self.on_message_received)
+        # No callback needed - we poll data via timer
 
     def on_size(self, event):
         event.Skip()
@@ -3462,13 +3649,14 @@ class XSubscriberPanel(wx.Panel):
 
     def on_reset_stats(self, event):
         """Reset all statistics."""
-        self.topic_stats = {}
+        XSubscriber().reset_stats()
         self.start_time = time.time() if self.is_running else None
         self.stats_list.DeleteAllItems()
-        self.update_summary_stats()
+        self._update_display()
 
     def on_toggle(self, event):
         if self.is_running:
+            self.update_timer.Stop()
             XSubscriber().stop()
             self.is_running = False
             self.toggle_btn.SetLabel("Start")
@@ -3492,24 +3680,33 @@ class XSubscriberPanel(wx.Panel):
             if success:
                 self.is_running = True
                 self.start_time = time.time()
-                self.topic_stats = {}
                 self.toggle_btn.SetLabel("Stop")
                 self.addr_txt.Enable(False)
                 self.topic_txt.Enable(False)
+                # Start UI update timer (100ms interval)
+                self.update_timer.Start(100)
                 wx.CallAfter(self.stats_panel.Layout)
             else:
                 wx.MessageBox(message, "Connection Error", wx.OK | wx.ICON_ERROR)
 
-    def update_summary_stats(self):
-        """Update the summary statistics labels."""
-        total_msgs = sum(s["count"] for s in self.topic_stats.values())
-        total_bytes = sum(s["bytes"] for s in self.topic_stats.values())
-        total_topics = len(self.topic_stats)
+    def on_update_timer(self, event):
+        """Timer callback - update UI with latest data from XSubscriber (every 10ms)."""
+        self._update_display()
 
-        # Calculate overall rate and speed
+    def _update_display(self):
+        """Update the UI with current data from the XSubscriber singleton."""
+        xsubscriber = XSubscriber()
+        topic_stats = xsubscriber.get_stats()
+        latest_messages = xsubscriber.get_messages()
+
+        # Update summary statistics
+        total_msgs = sum(s["count"] for s in topic_stats.values())
+        total_bytes = sum(s["bytes"] for s in topic_stats.values())
+        total_topics = len(topic_stats)
+
         rate_str = "-"
         speed_str = "-"
-        if self.start_time and self.topic_stats:
+        if self.start_time and topic_stats:
             elapsed = time.time() - self.start_time
             if elapsed > 0:
                 rate_str = f"{total_msgs / elapsed:.2f} msg/s"
@@ -3521,75 +3718,64 @@ class XSubscriberPanel(wx.Panel):
         self.summary_rate.SetLabel(rate_str)
         self.summary_speed.SetLabel(speed_str)
 
-    def update_topic_stats_display(self, topic):
-        """Update the statistics list for a specific topic."""
-        stats = self.topic_stats.get(topic)
-        if not stats:
-            return
+        # Update per-topic stats and messages
+        for topic, stats in topic_stats.items():
+            # Update stats list
+            elapsed = stats["last_time"] - stats["first_time"]
+            rate_str = f"{stats['count'] / elapsed:.2f}" if elapsed > 0 else "-"
+            bytes_str = format_bytes(stats["bytes"]).replace(" bytes", " B")
+            last_time = time.strftime("%H:%M:%S", time.localtime(stats["last_time"]))
 
-        # Calculate rate
-        elapsed = stats["last_time"] - stats["first_time"]
-        rate_str = f"{stats['count'] / elapsed:.2f}" if elapsed > 0 else "-"
-        bytes_str = format_bytes(stats["bytes"]).replace(" bytes", " B")
-        last_time = time.strftime("%H:%M:%S", time.localtime(stats["last_time"]))
+            found = False
+            for i in range(self.stats_list.GetItemCount()):
+                if self.stats_list.GetTextValue(i, 0) == topic:
+                    self.stats_list.SetTextValue(str(stats["count"]), i, 1)
+                    self.stats_list.SetTextValue(bytes_str, i, 2)
+                    self.stats_list.SetTextValue(rate_str, i, 3)
+                    self.stats_list.SetTextValue(last_time, i, 4)
+                    found = True
+                    break
+            if not found:
+                self.stats_list.AppendItem([topic, str(stats["count"]), bytes_str, rate_str, last_time])
 
-        # Find or add row
-        found = False
-        for i in range(self.stats_list.GetItemCount()):
-            if self.stats_list.GetTextValue(i, 0) == topic:
-                self.stats_list.SetTextValue(str(stats["count"]), i, 1)
-                self.stats_list.SetTextValue(bytes_str, i, 2)
-                self.stats_list.SetTextValue(rate_str, i, 3)
-                self.stats_list.SetTextValue(last_time, i, 4)
-                found = True
-                break
+            # Update message list (truncate to MAX_TABLE_MSG_LENGTH)
+            if topic in latest_messages:
+                message = latest_messages[topic]
+                msg_str = json.dumps(message) if isinstance(message, dict) else str(message)
+                # Truncate for table display
+                if len(msg_str) > self.MAX_TABLE_MSG_LENGTH:
+                    msg_str = msg_str[: self.MAX_TABLE_MSG_LENGTH] + "..."
 
-        if not found:
-            self.stats_list.AppendItem([topic, str(stats["count"]), bytes_str, rate_str, last_time])
+                found = False
+                for i in range(self.msg_list.GetItemCount()):
+                    if self.msg_list.GetTextValue(i, 0) == topic:
+                        self.msg_list.SetTextValue(msg_str, i, 1)
+                        found = True
+                        break
+                if not found:
+                    self.msg_list.AppendItem([topic, msg_str])
 
-    def on_message_received(self, topic, message):
-        current_time = time.time()
-        msg_str = json.dumps(message) if isinstance(message, dict) else str(message)
-        msg_bytes = len(msg_str.encode("utf-8"))
-
-        if topic not in self.topic_stats:
-            self.topic_stats[topic] = {"count": 0, "bytes": 0, "first_time": current_time, "last_time": current_time}
-
-        self.topic_stats[topic]["count"] += 1
-        self.topic_stats[topic]["bytes"] += msg_bytes
-        self.topic_stats[topic]["last_time"] = current_time
-
-        # Update message list
-        found = False
-        for i in range(self.msg_list.GetItemCount()):
-            if self.msg_list.GetTextValue(i, 0) == topic:
-                self.msg_list.SetTextValue(msg_str, i, 1)
-                found = True
-                break
-        if not found:
-            self.msg_list.AppendItem([topic, msg_str])
-
-        # Update topic frame if exists
-        if topic in self.topic_frames:
-            if self.topic_frames[topic]:
-                self.topic_frames[topic].update_message(message)
-            else:
-                del self.topic_frames[topic]
-
-        # Update stats display
-        self.update_topic_stats_display(topic)
-        self.update_summary_stats()
+                # Update topic frame if exists (with full message, no truncation)
+                if topic in self.topic_frames:
+                    frame = self.topic_frames.get(topic)
+                    if frame:
+                        frame.update_message(message)
+                    else:
+                        del self.topic_frames[topic]
 
     def on_item_activated(self, event):
         selection = self.msg_list.GetSelectedRow()
         if selection != wx.NOT_FOUND:
             topic = self.msg_list.GetTextValue(selection, 0)
-            msg_str = self.msg_list.GetTextValue(selection, 1)
+
+            # Get full message from XSubscriber (not truncated table version)
+            latest_messages = XSubscriber().get_messages()
+            message = latest_messages.get(topic, "")
 
             if topic not in self.topic_frames or not self.topic_frames[topic]:
                 self.topic_frames[topic] = TopicFrame(self, topic)
 
-            self.topic_frames[topic].update_message(msg_str)
+            self.topic_frames[topic].update_message(message)
             self.topic_frames[topic].Raise()
 
     def on_msg_list_right_click(self, event):
@@ -4153,9 +4339,17 @@ class RadioPanel(wx.Panel, RecentMessagesMixin, SplitterInitMixin):
 class DishPanel(wx.Panel):
     """UI Panel for DISH socket - group-based receive (draft API)."""
 
+    # Maximum message length to display in text area
+    MAX_DISPLAY_MSG_LENGTH = 500
+
     def __init__(self, parent):
         super().__init__(parent)
         self.is_running = False
+        self.last_displayed_count = 0
+
+        # UI update timer (100ms interval)
+        self.update_timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self.on_update_timer, self.update_timer)
 
         self.main_sizer = wx.BoxSizer(wx.VERTICAL)
 
@@ -4189,7 +4383,7 @@ class DishPanel(wx.Panel):
 
         # Stats
         self.stats_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        self.stats_lbl = wx.StaticText(self, label="Messages: 0")
+        self.stats_lbl = wx.StaticText(self, label="Messages: 0 | Data: 0 B | Speed: 0 B/s")
         self.clear_btn = wx.Button(self, label="Clear")
         self.stats_sizer.Add(self.stats_lbl, 1, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
         self.stats_sizer.Add(self.clear_btn, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
@@ -4204,11 +4398,9 @@ class DishPanel(wx.Panel):
         self.start_btn.Bind(wx.EVT_BUTTON, self.on_start_toggle)
         self.clear_btn.Bind(wx.EVT_BUTTON, self.on_clear)
 
-        self.message_count = 0
-        Dish().set_callback(self.recv_message)
-
     def on_start_toggle(self, event):
         if self.is_running:
+            self.update_timer.Stop()
             Dish().stop()
             self.is_running = False
             self.start_btn.SetLabel("Start")
@@ -4234,27 +4426,50 @@ class DishPanel(wx.Panel):
 
             if success:
                 self.is_running = True
+                self.last_displayed_count = 0
                 self.start_btn.SetLabel("Stop")
                 self.addr_txt.Enable(False)
                 self.group_txt.Enable(False)
                 self.recv_txt.SetValue("")
+                # Start UI update timer (100ms interval)
+                self.update_timer.Start(100)
             else:
                 wx.MessageBox(message, "Connection Error", wx.OK | wx.ICON_ERROR)
 
+    def on_update_timer(self, event):
+        """Timer callback to update UI from Dish's internal state."""
+        dish = Dish()
+        stats = dish.get_stats()
+
+        # Update statistics
+        elapsed = time.time() - stats["start_time"] if stats["start_time"] else 1
+        speed = stats["bytes"] / elapsed if elapsed > 0 else 0
+        stats_text = f"Messages: {stats['count']} | Data: {format_bytes(stats['bytes'])} | Speed: {format_speed(speed)}"
+        self.stats_lbl.SetLabel(stats_text)
+
+        # Get new messages since last update
+        new_messages = dish.get_new_messages(self.last_displayed_count)
+        if new_messages:
+            current = self.recv_txt.GetValue()
+            if current.startswith("\n\n\n\t\t"):
+                current = ""
+
+            for num, group, msg in new_messages:
+                formatted = format_json_message(msg)
+                # Truncate for display
+                if len(formatted) > self.MAX_DISPLAY_MSG_LENGTH:
+                    formatted = formatted[: self.MAX_DISPLAY_MSG_LENGTH] + "..."
+                if current:
+                    current += "\n---\n"
+                current += f"[{group}] {formatted}"
+                self.last_displayed_count = num
+
+            self.recv_txt.SetValue(current)
+
     def on_clear(self, event):
         self.recv_txt.SetValue("")
-        self.message_count = 0
-        self.stats_lbl.SetLabel("Messages: 0")
-
-    def recv_message(self, group, message):
-        self.message_count += 1
-        self.stats_lbl.SetLabel(f"Messages: {self.message_count}")
-
-        formatted = format_json_message(message)
-        current = self.recv_txt.GetValue()
-        if current:
-            current += "\n---\n"
-        self.recv_txt.SetValue(current + f"[{group}] {formatted}")
+        self.last_displayed_count = 0
+        Dish().reset_stats()
 
 
 class ScatterPanel(wx.Panel, RecentMessagesMixin, SplitterInitMixin):
@@ -4365,9 +4580,17 @@ class ScatterPanel(wx.Panel, RecentMessagesMixin, SplitterInitMixin):
 class GatherPanel(wx.Panel):
     """UI Panel for GATHER socket - fair-queued receive (draft API)."""
 
+    # Maximum message length to display in text area
+    MAX_DISPLAY_MSG_LENGTH = 500
+
     def __init__(self, parent):
         super().__init__(parent)
         self.is_running = False
+        self.last_displayed_count = 0
+
+        # UI update timer (100ms interval)
+        self.update_timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self.on_update_timer, self.update_timer)
 
         self.main_sizer = wx.BoxSizer(wx.VERTICAL)
 
@@ -4409,10 +4632,9 @@ class GatherPanel(wx.Panel):
         self.start_btn.Bind(wx.EVT_BUTTON, self.on_start_toggle)
         self.clear_btn.Bind(wx.EVT_BUTTON, self.on_clear)
 
-        Gather().set_callback(self.recv_message)
-
     def on_start_toggle(self, event):
         if self.is_running:
+            self.update_timer.Stop()
             Gather().stop()
             self.is_running = False
             self.start_btn.SetLabel("Start")
@@ -4428,34 +4650,49 @@ class GatherPanel(wx.Panel):
 
             if success:
                 self.is_running = True
+                self.last_displayed_count = 0
                 self.start_btn.SetLabel("Stop")
                 self.addr_txt.Enable(False)
                 self.recv_txt.SetValue("")
+                # Start UI update timer (100ms interval)
+                self.update_timer.Start(100)
             else:
                 wx.MessageBox(message, "Connection Error", wx.OK | wx.ICON_ERROR)
 
+    def on_update_timer(self, event):
+        """Timer callback to update UI from Gather's internal state."""
+        gather = Gather()
+        stats = gather.get_stats()
+
+        # Update statistics
+        elapsed = time.time() - stats["start_time"] if stats["start_time"] else 1
+        speed = stats["bytes"] / elapsed if elapsed > 0 else 0
+        stats_text = f"Messages: {stats['count']} | Data: {format_bytes(stats['bytes'])} | Speed: {format_speed(speed)}"
+        self.stats_lbl.SetLabel(stats_text)
+
+        # Get new messages since last update
+        new_messages = gather.get_new_messages(self.last_displayed_count)
+        if new_messages:
+            current = self.recv_txt.GetValue()
+            if current.startswith("\n\n\n\t\t"):
+                current = ""
+
+            for num, msg in new_messages:
+                formatted = format_json_message(msg)
+                # Truncate for display
+                if len(formatted) > self.MAX_DISPLAY_MSG_LENGTH:
+                    formatted = formatted[: self.MAX_DISPLAY_MSG_LENGTH] + "..."
+                if current:
+                    current += "\n---\n"
+                current += formatted
+                self.last_displayed_count = num
+
+            self.recv_txt.SetValue(current)
+
     def on_clear(self, event):
         self.recv_txt.SetValue("")
-        Gather().message_count = 0
-        Gather().total_bytes = 0
-        Gather().start_time = time.time()
-        self.stats_lbl.SetLabel("Messages: 0 | Data: 0 B | Speed: 0 B/s")
-
-    def recv_message(self, message):
-        gather = Gather()
-        elapsed = time.time() - gather.start_time if gather.start_time else 1
-        speed = gather.total_bytes / elapsed if elapsed > 0 else 0
-
-        stats = f"Messages: {gather.message_count} | Data: {format_bytes(gather.total_bytes)} | Speed: {format_speed(speed)}"
-        self.stats_lbl.SetLabel(stats)
-
-        formatted = format_json_message(message)
-        current = self.recv_txt.GetValue()
-        if current.startswith("\n\n\n\t\t"):
-            current = ""
-        if current:
-            current += "\n---\n"
-        self.recv_txt.SetValue(current + formatted)
+        self.last_displayed_count = 0
+        Gather().reset_stats()
 
 
 class MainFrame(wx.Frame):
