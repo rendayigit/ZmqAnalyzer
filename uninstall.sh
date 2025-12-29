@@ -1,8 +1,9 @@
 #!/bin/bash
 
 # ZmqAnalyzer Uninstallation Script
+# Usage: sudo ./uninstall.sh
 
-set -e  # Exit on any error
+set -euo pipefail  # Exit on error, undefined vars, and pipe failures
 
 # Colors for output
 RED='\033[0;31m'

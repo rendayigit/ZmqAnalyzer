@@ -1,9 +1,11 @@
 # ZmqAnalyzer AI Coding Instructions
 
 ## Project Overview
+
 ZmqAnalyzer is a Python desktop application acting as a "Postman for ZeroMQ". It allows users to interact with ZeroMQ sockets via a GUI built with wxPython.
 
 ### Supported ZMQ Patterns
+
 - **PUB/SUB**: Publish/Subscribe - one-to-many message broadcast with topic filtering
 - **REQ/REP**: Request/Reply - synchronous RPC-style communication
 - **PUSH/PULL**: Pipeline - task distribution with load balancing
@@ -18,6 +20,7 @@ ZmqAnalyzer is a Python desktop application acting as a "Postman for ZeroMQ". It
 ## Architecture & Patterns
 
 ### Core Components
+
 - **Single Script**: `zmq_analyzer.py` contains the entire application logic.
 - **Main UI**: `MainFrame` manages a `wx.Notebook` containing tabs for different ZMQ patterns.
 - **Panel Hierarchy**:
@@ -52,7 +55,18 @@ ZmqAnalyzer is a Python desktop application acting as a "Postman for ZeroMQ". It
   - Send timeouts used where appropriate (e.g., PAIR socket) to prevent blocking.
   - Draft API sockets (CLIENT, SERVER, RADIO, DISH, SCATTER, GATHER) use Frame objects for routing_id and group handling.
 
+### Statistics System
+
+- **Sliding Window Approach**: Rate and speed statistics use a 1-second sliding window (`STATS_WINDOW_SEC = 1.0`) for instant measurements.
+- **Cumulative Statistics**: Total message count and bytes are tracked cumulatively.
+- **Instant Statistics**: Rate (msg/s) and speed (B/s) are calculated from data in the last 1 second only.
+- **Data Structures**:
+  - `topic_stats`: Cumulative stats per topic (count, bytes, first_time, last_time).
+  - `recent_data`: Sliding window data as `[(timestamp, bytes), ...]` for instant rate calculation.
+- **Behavior**: When communication stops, rate and speed drop to 0 immediately (within 1 second).
+
 ### Data Flow
+
 1. **User Action**: User clicks "Bind"/"Unbind", "Start"/"Stop", or "Send"/"Publish".
 2. **UI Event**: Event handler calls ZMQ singleton method.
 3. **ZMQ Logic**: Performs socket operation (bind/unbind/send/recv).
@@ -60,6 +74,7 @@ ZmqAnalyzer is a Python desktop application acting as a "Postman for ZeroMQ". It
 5. **Configuration**: Persistent data is handled by `Config` class using `json` module, stored in `~/.zmqanalyzer-config.json`.
 
 ### UI Patterns
+
 - **Toggle Buttons**: Single buttons that switch between states (Bind/Unbind, Start/Stop) instead of separate button pairs.
 - **JSON Formatting**: Messages are automatically pretty-printed if they are valid JSON.
 - **Error Dialogs**: `wx.MessageBox` is used for displaying errors and warnings to users.
@@ -68,17 +83,22 @@ ZmqAnalyzer is a Python desktop application acting as a "Postman for ZeroMQ". It
 ## Build & Workflow
 
 ### Dependencies
+
 - **Python 3.x**
-- **wxPython**
-- **pyzmq**
+- **wxPython** (>=4.0.0)
+- **pyzmq** (>=22.0.0)
 
 ### Installation
+
 - `install.sh`: Installs the application system-wide with desktop shortcut (requires sudo).
 - `uninstall.sh`: Removes the installation (requires sudo).
 
 ## Coding Conventions
+
 - **Language**: Python 3.
 - **UI Library**: wxPython.
 - **Threading**: Use `threading` module for blocking ZMQ operations. Always use `wx.CallAfter` for UI updates from threads.
 - **Logging**: Use `print()` statements for console output (no logging module).
 - **Error Handling**: Show user-facing errors via `wx.MessageBox`, print technical details to console.
+- **Exception Handling**: Always use specific exception types (e.g., `except Exception:`) instead of bare `except:`.
+- **Code Style**: Use Black formatter with 150 character line length.

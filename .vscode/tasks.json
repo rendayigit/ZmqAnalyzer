@@ -6,41 +6,51 @@
       "type": "shell",
       "command": "${command:python.interpreterPath}",
       "args": ["zmq_analyzer.py"],
-      "group": "test",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
       "presentation": {
         "echo": true,
         "reveal": "always",
         "focus": false,
         "panel": "shared"
-      }
+      },
+      "problemMatcher": []
     },
     {
       "label": "Install App",
       "type": "shell",
-      "group": {
-        "kind": "build",
-        "isDefault": true
-      },
-      "command": ["chmod +x ./install.sh;", "sudo ./install.sh"],
+      "command": "chmod +x ./install.sh && sudo ./install.sh",
+      "group": "build",
       "options": {
-        "cwd": "${workspaceFolder}/"
+        "cwd": "${workspaceFolder}"
       },
-      "problemMatcher": "$gcc",
+      "problemMatcher": [],
       "runOptions": { "reevaluateOnRerun": false }
     },
     {
       "label": "Uninstall App",
       "type": "shell",
-      "group": {
-        "kind": "build",
-        "isDefault": true
-      },
-      "command": ["chmod +x ./uninstall.sh;", "sudo ./uninstall.sh"],
+      "command": "chmod +x ./uninstall.sh && sudo ./uninstall.sh",
+      "group": "build",
       "options": {
-        "cwd": "${workspaceFolder}/"
+        "cwd": "${workspaceFolder}"
       },
-      "problemMatcher": "$gcc",
+      "problemMatcher": [],
       "runOptions": { "reevaluateOnRerun": false }
+    },
+    {
+      "label": "Install Dependencies",
+      "type": "shell",
+      "command": "${command:python.interpreterPath}",
+      "args": ["-m", "pip", "install", "-r", "requirements.txt"],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
     }
   ]
 }

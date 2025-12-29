@@ -2,8 +2,9 @@
 
 # ZmqAnalyzer Installation Script
 # This script installs ZmqAnalyzer to standard Linux directories
+# Usage: sudo ./install.sh
 
-set -e  # Exit on any error
+set -euo pipefail  # Exit on error, undefined vars, and pipe failures
 
 # Colors for output
 RED='\033[0;31m'

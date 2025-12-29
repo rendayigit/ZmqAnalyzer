@@ -1,2 +1,2 @@
-wxPython
-pyzmq
+wxPython>=4.0.0
+pyzmq>=22.0.0

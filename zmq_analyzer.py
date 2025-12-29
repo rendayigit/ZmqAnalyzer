@@ -427,7 +427,7 @@ class Replyer:
         if self.socket:
             try:
                 self.socket.close()
-            except:
+            except Exception:
                 pass
             self.socket = None
 
@@ -630,7 +630,7 @@ class Puller:
             cutoff = current_time - self.STATS_WINDOW_SEC
             # Filter and clean up old data
             self.recent_data = [(t, b) for t, b in self.recent_data if t >= cutoff]
-            
+
             # Calculate instant rates from sliding window
             if self.recent_data:
                 instant_count = len(self.recent_data)
@@ -642,13 +642,13 @@ class Puller:
             else:
                 instant_rate = 0.0
                 instant_speed = 0.0
-            
+
             return {
                 "count": self.message_count,
                 "bytes": self.total_bytes,
                 "start_time": self.start_time,
                 "instant_rate": instant_rate,
-                "instant_speed": instant_speed
+                "instant_speed": instant_speed,
             }
 
     def get_new_messages(self, last_count):
@@ -718,7 +718,7 @@ class Dealer:
         if self.socket:
             try:
                 self.socket.close()
-            except:
+            except Exception:
                 pass
             self.socket = None
 
@@ -823,7 +823,7 @@ class Router:
         if self.socket:
             try:
                 self.socket.close()
-            except:
+            except Exception:
                 pass
             self.socket = None
 
@@ -950,7 +950,7 @@ class PairSocket:
         if self.socket:
             try:
                 self.socket.close()
-            except:
+            except Exception:
                 pass
             self.socket = None
 
@@ -958,7 +958,7 @@ class PairSocket:
             self.thread.join(timeout=0.5)
             self.thread = None
 
-        print(f"Pair stopped")
+        print("Pair stopped")
         return True, "Pair stopped"
 
     def send(self, message):
@@ -1344,7 +1344,7 @@ class StreamSocket:
         if self.socket:
             try:
                 self.socket.close()
-            except:
+            except Exception:
                 pass
             self.socket = None
 
@@ -1443,7 +1443,7 @@ class Client:
         if self.socket:
             try:
                 self.socket.close()
-            except:
+            except Exception:
                 pass
             self.socket = None
         if self.thread:
@@ -1514,7 +1514,7 @@ class Server:
         if self.socket:
             try:
                 self.socket.close()
-            except:
+            except Exception:
                 pass
             self.socket = None
         if self.thread:
@@ -1584,7 +1584,7 @@ class Radio:
         if self.socket:
             try:
                 self.socket.close()
-            except:
+            except Exception:
                 pass
             self.socket = None
         self.is_bound = False
@@ -1663,7 +1663,7 @@ class Dish:
         if self.socket:
             try:
                 self.socket.close()
-            except:
+            except Exception:
                 pass
             self.socket = None
         if self.thread:
@@ -1703,7 +1703,7 @@ class Dish:
             cutoff = current_time - self.STATS_WINDOW_SEC
             # Filter and clean up old data
             self.recent_data = [(t, b) for t, b in self.recent_data if t >= cutoff]
-            
+
             # Calculate instant rates from sliding window
             if self.recent_data:
                 instant_count = len(self.recent_data)
@@ -1715,13 +1715,13 @@ class Dish:
             else:
                 instant_rate = 0.0
                 instant_speed = 0.0
-            
+
             return {
                 "count": self.message_count,
                 "bytes": self.total_bytes,
                 "start_time": self.start_time,
                 "instant_rate": instant_rate,
-                "instant_speed": instant_speed
+                "instant_speed": instant_speed,
             }
 
     def get_new_messages(self, last_count):
@@ -1770,7 +1770,7 @@ class Scatter:
         if self.socket:
             try:
                 self.socket.close()
-            except:
+            except Exception:
                 pass
             self.socket = None
         self.is_bound = False
@@ -1842,7 +1842,7 @@ class Gather:
         if self.socket:
             try:
                 self.socket.close()
-            except:
+            except Exception:
                 pass
             self.socket = None
         if self.thread:
@@ -1883,7 +1883,7 @@ class Gather:
             cutoff = current_time - self.STATS_WINDOW_SEC
             # Filter and clean up old data
             self.recent_data = [(t, b) for t, b in self.recent_data if t >= cutoff]
-            
+
             # Calculate instant rates from sliding window
             if self.recent_data:
                 instant_count = len(self.recent_data)
@@ -1895,13 +1895,13 @@ class Gather:
             else:
                 instant_rate = 0.0
                 instant_speed = 0.0
-            
+
             return {
                 "count": self.message_count,
                 "bytes": self.total_bytes,
                 "start_time": self.start_time,
                 "instant_rate": instant_rate,
-                "instant_speed": instant_speed
+                "instant_speed": instant_speed,
             }
 
     def get_new_messages(self, last_count):

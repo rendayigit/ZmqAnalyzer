@@ -1,12 +1,12 @@
 {
-  "pylint.args": [
-    "--extension-pkg-whitelist=ursina",
-    "--disable=method-hidden,E0402,W0718,C0301,C0114,C0115,C0116,W0622"
-  ],
   "python.analysis.diagnosticSeverityOverrides": {
     "reportCallIssue": "none",
     "reportRedeclaration": "none",
     "reportArgumentType": "none"
   },
-  "black-formatter.args": ["--line-length", "150"]
+  "black-formatter.args": ["--line-length", "150"],
+  "editor.formatOnSave": true,
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.black-formatter"
+  }
 }

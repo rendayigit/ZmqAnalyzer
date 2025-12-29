@@ -1,6 +1,8 @@
 # ZmqAnalyzer
 
 [![GitHub](https://img.shields.io/badge/GitHub-ZmqAnalyzer-blue?logo=github)](https://github.com/rendayigit/ZmqAnalyzer)
+[![Python](https://img.shields.io/badge/Python-3.x-blue?logo=python)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 <p align="center">
   <img src="zmqanalyzer.png" alt="ZmqAnalyzer Logo" width="128">
