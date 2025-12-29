@@ -189,14 +189,54 @@ class Subscriber:
             cls._instance.thread = None
             cls._instance.callback = None
             cls._instance.latest_messages = {}
-            cls._instance.topic_stats = {}
+            cls._instance.topic_stats = {}  # Cumulative stats: {topic: {count, bytes, first_time, last_time}}
+            cls._instance.recent_data = {}  # Sliding window: {topic: [(timestamp, bytes), ...]}
             cls._instance.lock = threading.Lock()
+            cls._instance.STATS_WINDOW_SEC = 1.0  # 1 second sliding window for instant rate
         return cls._instance
 
     def get_stats(self):
         """Get a copy of current statistics (thread-safe)."""
         with self.lock:
-            return {topic: stats.copy() for topic, stats in self.topic_stats.items()}
+            current_time = time.time()
+            result = {}
+            for topic, stats in self.topic_stats.items():
+                result[topic] = stats.copy()
+                # Calculate instant rate from sliding window
+                if topic in self.recent_data:
+                    cutoff = current_time - self.STATS_WINDOW_SEC
+                    # Filter to keep only data within the window
+                    recent = [(t, b) for t, b in self.recent_data[topic] if t >= cutoff]
+                    self.recent_data[topic] = recent  # Clean up old data
+                    if recent:
+                        window_count = len(recent)
+                        window_bytes = sum(b for _, b in recent)
+                        # Calculate rate based on actual time span or window size
+                        time_span = current_time - recent[0][0] if len(recent) > 1 else self.STATS_WINDOW_SEC
+                        time_span = max(time_span, 0.001)  # Avoid division by zero
+                        result[topic]["instant_rate"] = window_count / time_span
+                        result[topic]["instant_speed"] = window_bytes / time_span
+                    else:
+                        result[topic]["instant_rate"] = 0.0
+                        result[topic]["instant_speed"] = 0.0
+                else:
+                    result[topic]["instant_rate"] = 0.0
+                    result[topic]["instant_speed"] = 0.0
+            return result
+
+    def get_instant_totals(self):
+        """Get instant rate totals across all topics (thread-safe)."""
+        with self.lock:
+            current_time = time.time()
+            cutoff = current_time - self.STATS_WINDOW_SEC
+            total_count = 0
+            total_bytes = 0
+            for topic, data_list in self.recent_data.items():
+                recent = [(t, b) for t, b in data_list if t >= cutoff]
+                self.recent_data[topic] = recent  # Clean up old data
+                total_count += len(recent)
+                total_bytes += sum(b for _, b in recent)
+            return {"instant_count": total_count, "instant_bytes": total_bytes}
 
     def get_messages(self):
         """Get a copy of latest messages (thread-safe)."""
@@ -207,6 +247,7 @@ class Subscriber:
         """Reset statistics (thread-safe)."""
         with self.lock:
             self.topic_stats = {}
+            self.recent_data = {}
 
     def start(self, topics, address):
         """Start subscribing to topics at the specified address."""
@@ -266,12 +307,17 @@ class Subscriber:
                             # Store latest message
                             self.latest_messages[topic] = msg_data
 
-                            # Update statistics
+                            # Update cumulative statistics
                             if topic not in self.topic_stats:
                                 self.topic_stats[topic] = {"count": 0, "bytes": 0, "first_time": current_time, "last_time": current_time}
                             self.topic_stats[topic]["count"] += 1
                             self.topic_stats[topic]["bytes"] += msg_bytes
                             self.topic_stats[topic]["last_time"] = current_time
+
+                            # Update sliding window for instant rate calculation
+                            if topic not in self.recent_data:
+                                self.recent_data[topic] = []
+                            self.recent_data[topic].append((current_time, msg_bytes))
             except zmq.ZMQError:
                 break
             except Exception as e:
@@ -508,6 +554,9 @@ class Puller:
             cls._instance.latest_message = None
             cls._instance.messages_buffer = []  # Buffer recent messages for display
             cls._instance.max_buffer_size = 100  # Keep last 100 messages
+            # Sliding window for instant rate calculation
+            cls._instance.recent_data = []  # [(timestamp, bytes), ...]
+            cls._instance.STATS_WINDOW_SEC = 1.0  # 1 second sliding window
         return cls._instance
 
     def start(self, address):
@@ -522,6 +571,7 @@ class Puller:
             self.total_bytes = 0
             self.start_time = time.time()
             self.messages_buffer = []
+            self.recent_data = []
             self.latest_message = None
             self.thread = threading.Thread(target=self._receive_loop, daemon=True)
             self.thread.start()
@@ -552,8 +602,10 @@ class Puller:
                 if self.socket.poll(100):
                     message = self.socket.recv_string()
                     with self.lock:
+                        current_time = time.time()
+                        msg_bytes = len(message.encode("utf-8"))
                         self.message_count += 1
-                        self.total_bytes += len(message.encode("utf-8"))
+                        self.total_bytes += msg_bytes
                         # Parse JSON if possible
                         try:
                             msg_parsed = json.loads(message)
@@ -564,15 +616,40 @@ class Puller:
                         self.messages_buffer.append((self.message_count, msg_parsed))
                         if len(self.messages_buffer) > self.max_buffer_size:
                             self.messages_buffer.pop(0)
+                        # Update sliding window for instant rate
+                        self.recent_data.append((current_time, msg_bytes))
             except zmq.ZMQError:
                 break
             except Exception as e:
                 print(f"Puller loop error: {e}")
 
     def get_stats(self):
-        """Get current statistics."""
+        """Get current statistics including instant rates."""
         with self.lock:
-            return {"count": self.message_count, "bytes": self.total_bytes, "start_time": self.start_time}
+            current_time = time.time()
+            cutoff = current_time - self.STATS_WINDOW_SEC
+            # Filter and clean up old data
+            self.recent_data = [(t, b) for t, b in self.recent_data if t >= cutoff]
+            
+            # Calculate instant rates from sliding window
+            if self.recent_data:
+                instant_count = len(self.recent_data)
+                instant_bytes = sum(b for _, b in self.recent_data)
+                time_span = current_time - self.recent_data[0][0] if len(self.recent_data) > 1 else self.STATS_WINDOW_SEC
+                time_span = max(time_span, 0.001)
+                instant_rate = instant_count / time_span
+                instant_speed = instant_bytes / time_span
+            else:
+                instant_rate = 0.0
+                instant_speed = 0.0
+            
+            return {
+                "count": self.message_count,
+                "bytes": self.total_bytes,
+                "start_time": self.start_time,
+                "instant_rate": instant_rate,
+                "instant_speed": instant_speed
+            }
 
     def get_new_messages(self, last_count):
         """Get messages since last_count."""
@@ -586,6 +663,7 @@ class Puller:
             self.total_bytes = 0
             self.start_time = time.time()
             self.messages_buffer = []
+            self.recent_data = []
             self.latest_message = None
 
 
@@ -1030,14 +1108,54 @@ class XSubscriber:
             cls._instance.thread = None
             cls._instance.callback = None
             cls._instance.latest_messages = {}
-            cls._instance.topic_stats = {}
+            cls._instance.topic_stats = {}  # Cumulative stats: {topic: {count, bytes, first_time, last_time}}
+            cls._instance.recent_data = {}  # Sliding window: {topic: [(timestamp, bytes), ...]}
             cls._instance.lock = threading.Lock()
+            cls._instance.STATS_WINDOW_SEC = 1.0  # 1 second sliding window for instant rate
         return cls._instance
 
     def get_stats(self):
         """Get a copy of current statistics (thread-safe)."""
         with self.lock:
-            return {topic: stats.copy() for topic, stats in self.topic_stats.items()}
+            current_time = time.time()
+            result = {}
+            for topic, stats in self.topic_stats.items():
+                result[topic] = stats.copy()
+                # Calculate instant rate from sliding window
+                if topic in self.recent_data:
+                    cutoff = current_time - self.STATS_WINDOW_SEC
+                    # Filter to keep only data within the window
+                    recent = [(t, b) for t, b in self.recent_data[topic] if t >= cutoff]
+                    self.recent_data[topic] = recent  # Clean up old data
+                    if recent:
+                        window_count = len(recent)
+                        window_bytes = sum(b for _, b in recent)
+                        # Calculate rate based on actual time span or window size
+                        time_span = current_time - recent[0][0] if len(recent) > 1 else self.STATS_WINDOW_SEC
+                        time_span = max(time_span, 0.001)  # Avoid division by zero
+                        result[topic]["instant_rate"] = window_count / time_span
+                        result[topic]["instant_speed"] = window_bytes / time_span
+                    else:
+                        result[topic]["instant_rate"] = 0.0
+                        result[topic]["instant_speed"] = 0.0
+                else:
+                    result[topic]["instant_rate"] = 0.0
+                    result[topic]["instant_speed"] = 0.0
+            return result
+
+    def get_instant_totals(self):
+        """Get instant rate totals across all topics (thread-safe)."""
+        with self.lock:
+            current_time = time.time()
+            cutoff = current_time - self.STATS_WINDOW_SEC
+            total_count = 0
+            total_bytes = 0
+            for topic, data_list in self.recent_data.items():
+                recent = [(t, b) for t, b in data_list if t >= cutoff]
+                self.recent_data[topic] = recent  # Clean up old data
+                total_count += len(recent)
+                total_bytes += sum(b for _, b in recent)
+            return {"instant_count": total_count, "instant_bytes": total_bytes}
 
     def get_messages(self):
         """Get a copy of latest messages (thread-safe)."""
@@ -1048,6 +1166,7 @@ class XSubscriber:
         """Reset statistics (thread-safe)."""
         with self.lock:
             self.topic_stats = {}
+            self.recent_data = {}
 
     def start(self, topics, address):
         """Start subscribing to topics at the specified address."""
@@ -1131,12 +1250,17 @@ class XSubscriber:
                             # Store latest message
                             self.latest_messages[topic] = msg_data
 
-                            # Update statistics
+                            # Update cumulative statistics
                             if topic not in self.topic_stats:
                                 self.topic_stats[topic] = {"count": 0, "bytes": 0, "first_time": current_time, "last_time": current_time}
                             self.topic_stats[topic]["count"] += 1
                             self.topic_stats[topic]["bytes"] += msg_bytes
                             self.topic_stats[topic]["last_time"] = current_time
+
+                            # Update sliding window for instant rate calculation
+                            if topic not in self.recent_data:
+                                self.recent_data[topic] = []
+                            self.recent_data[topic].append((current_time, msg_bytes))
             except zmq.ZMQError:
                 break
             except Exception as e:
@@ -1501,6 +1625,9 @@ class Dish:
             cls._instance.latest_group = None
             cls._instance.messages_buffer = []  # Buffer recent messages
             cls._instance.max_buffer_size = 50
+            # Sliding window for instant rate calculation
+            cls._instance.recent_data = []  # [(timestamp, bytes), ...]
+            cls._instance.STATS_WINDOW_SEC = 1.0  # 1 second sliding window
         return cls._instance
 
     def set_callback(self, callback):
@@ -1520,6 +1647,7 @@ class Dish:
             self.total_bytes = 0
             self.start_time = time.time()
             self.messages_buffer = []
+            self.recent_data = []
             self.latest_message = None
             self.latest_group = None
             self.thread = threading.Thread(target=self._receive_loop, daemon=True)
@@ -1552,22 +1680,49 @@ class Dish:
                     message = bytes(frame.buffer).decode("utf-8", errors="replace")
                     group = frame.group
                     with self.lock:
+                        current_time = time.time()
+                        msg_bytes = len(message.encode("utf-8"))
                         self.message_count += 1
-                        self.total_bytes += len(message.encode("utf-8"))
+                        self.total_bytes += msg_bytes
                         self.latest_message = message
                         self.latest_group = group
                         self.messages_buffer.append((self.message_count, group, message))
                         if len(self.messages_buffer) > self.max_buffer_size:
                             self.messages_buffer.pop(0)
+                        # Update sliding window for instant rate
+                        self.recent_data.append((current_time, msg_bytes))
             except zmq.ZMQError:
                 break
             except Exception as e:
                 print(f"Dish receive error: {e}")
 
     def get_stats(self):
-        """Get current statistics."""
+        """Get current statistics including instant rates."""
         with self.lock:
-            return {"count": self.message_count, "bytes": self.total_bytes, "start_time": self.start_time}
+            current_time = time.time()
+            cutoff = current_time - self.STATS_WINDOW_SEC
+            # Filter and clean up old data
+            self.recent_data = [(t, b) for t, b in self.recent_data if t >= cutoff]
+            
+            # Calculate instant rates from sliding window
+            if self.recent_data:
+                instant_count = len(self.recent_data)
+                instant_bytes = sum(b for _, b in self.recent_data)
+                time_span = current_time - self.recent_data[0][0] if len(self.recent_data) > 1 else self.STATS_WINDOW_SEC
+                time_span = max(time_span, 0.001)
+                instant_rate = instant_count / time_span
+                instant_speed = instant_bytes / time_span
+            else:
+                instant_rate = 0.0
+                instant_speed = 0.0
+            
+            return {
+                "count": self.message_count,
+                "bytes": self.total_bytes,
+                "start_time": self.start_time,
+                "instant_rate": instant_rate,
+                "instant_speed": instant_speed
+            }
 
     def get_new_messages(self, last_count):
         """Get messages since last_count."""
@@ -1581,6 +1736,7 @@ class Dish:
             self.total_bytes = 0
             self.start_time = time.time()
             self.messages_buffer = []
+            self.recent_data = []
             self.latest_message = None
             self.latest_group = None
 
@@ -1653,6 +1809,9 @@ class Gather:
             cls._instance.latest_message = None
             cls._instance.messages_buffer = []
             cls._instance.max_buffer_size = 50
+            # Sliding window for instant rate calculation
+            cls._instance.recent_data = []  # [(timestamp, bytes), ...]
+            cls._instance.STATS_WINDOW_SEC = 1.0  # 1 second sliding window
         return cls._instance
 
     def set_callback(self, callback):
@@ -1668,6 +1827,7 @@ class Gather:
             self.total_bytes = 0
             self.start_time = time.time()
             self.messages_buffer = []
+            self.recent_data = []
             self.latest_message = None
             self.thread = threading.Thread(target=self._receive_loop, daemon=True)
             self.thread.start()
@@ -1696,8 +1856,10 @@ class Gather:
                 if self.socket.poll(100):
                     message = self.socket.recv_string()
                     with self.lock:
+                        current_time = time.time()
+                        msg_bytes = len(message.encode("utf-8"))
                         self.message_count += 1
-                        self.total_bytes += len(message.encode("utf-8"))
+                        self.total_bytes += msg_bytes
                         # Parse JSON if possible
                         try:
                             msg_parsed = json.loads(message)
@@ -1707,15 +1869,40 @@ class Gather:
                         self.messages_buffer.append((self.message_count, msg_parsed))
                         if len(self.messages_buffer) > self.max_buffer_size:
                             self.messages_buffer.pop(0)
+                        # Update sliding window for instant rate
+                        self.recent_data.append((current_time, msg_bytes))
             except zmq.ZMQError:
                 break
             except Exception as e:
                 print(f"Gather receive error: {e}")
 
     def get_stats(self):
-        """Get current statistics."""
+        """Get current statistics including instant rates."""
         with self.lock:
-            return {"count": self.message_count, "bytes": self.total_bytes, "start_time": self.start_time}
+            current_time = time.time()
+            cutoff = current_time - self.STATS_WINDOW_SEC
+            # Filter and clean up old data
+            self.recent_data = [(t, b) for t, b in self.recent_data if t >= cutoff]
+            
+            # Calculate instant rates from sliding window
+            if self.recent_data:
+                instant_count = len(self.recent_data)
+                instant_bytes = sum(b for _, b in self.recent_data)
+                time_span = current_time - self.recent_data[0][0] if len(self.recent_data) > 1 else self.STATS_WINDOW_SEC
+                time_span = max(time_span, 0.001)
+                instant_rate = instant_count / time_span
+                instant_speed = instant_bytes / time_span
+            else:
+                instant_rate = 0.0
+                instant_speed = 0.0
+            
+            return {
+                "count": self.message_count,
+                "bytes": self.total_bytes,
+                "start_time": self.start_time,
+                "instant_rate": instant_rate,
+                "instant_speed": instant_speed
+            }
 
     def get_new_messages(self, last_count):
         """Get messages since last_count."""
@@ -1729,6 +1916,7 @@ class Gather:
             self.total_bytes = 0
             self.start_time = time.time()
             self.messages_buffer = []
+            self.recent_data = []
             self.latest_message = None
 
 
@@ -2542,7 +2730,7 @@ class SubscriberPanel(wx.Panel):
                 wx.MessageBox(message, "Connection Error", wx.OK | wx.ICON_ERROR)
 
     def on_update_timer(self, event):
-        """Timer callback - update UI with latest data from Subscriber (every 10ms)."""
+        """Timer callback - update UI with latest data from Subscriber (every 100ms)."""
         self._update_display()
 
     def _update_display(self):
@@ -2550,19 +2738,18 @@ class SubscriberPanel(wx.Panel):
         subscriber = Subscriber()
         topic_stats = subscriber.get_stats()
         latest_messages = subscriber.get_messages()
+        instant_totals = subscriber.get_instant_totals()
 
-        # Update summary statistics
+        # Update summary statistics (cumulative counts, instant rates)
         total_msgs = sum(s["count"] for s in topic_stats.values())
         total_bytes = sum(s["bytes"] for s in topic_stats.values())
         total_topics = len(topic_stats)
 
-        rate_str = "-"
-        speed_str = "-"
-        if self.start_time and topic_stats:
-            elapsed = time.time() - self.start_time
-            if elapsed > 0:
-                rate_str = f"{total_msgs / elapsed:.2f} msg/s"
-                speed_str = format_speed(total_bytes / elapsed)
+        # Use instant rates from sliding window (last 1 second)
+        instant_count = instant_totals["instant_count"]
+        instant_bytes = instant_totals["instant_bytes"]
+        rate_str = f"{instant_count:.2f} msg/s" if topic_stats else "-"
+        speed_str = format_speed(instant_bytes) if topic_stats else "-"
 
         self.summary_msgs.SetLabel(str(total_msgs))
         self.summary_bytes.SetLabel(format_bytes(total_bytes))
@@ -2572,9 +2759,9 @@ class SubscriberPanel(wx.Panel):
 
         # Update per-topic stats and messages
         for topic, stats in topic_stats.items():
-            # Update stats list
-            elapsed = stats["last_time"] - stats["first_time"]
-            rate_str = f"{stats['count'] / elapsed:.2f}" if elapsed > 0 else "-"
+            # Use instant rate from sliding window for per-topic rate
+            instant_rate = stats.get("instant_rate", 0.0)
+            rate_str = f"{instant_rate:.2f}" if instant_rate > 0 else "-"
             bytes_str = format_bytes(stats["bytes"]).replace(" bytes", " B")
             last_time = time.strftime("%H:%M:%S", time.localtime(stats["last_time"]))
 
@@ -2871,18 +3058,19 @@ class PullerPanel(wx.Panel, SplitterInitMixin):
             self.msg_list.AppendItem([str(num), display_msg])
             self.last_displayed_count = num
 
-        # Update statistics
+        # Update statistics (cumulative counts, instant rates)
         stats = puller.get_stats()
         self.stats_msgs.SetLabel(str(stats["count"]))
         self.stats_bytes.SetLabel(format_bytes(stats["bytes"]))
         if stats["start_time"]:
             elapsed = time.time() - stats["start_time"]
-            if elapsed > 0:
-                rate = stats["count"] / elapsed
-                self.stats_rate.SetLabel(f"{rate:.2f} msg/s")
-                self.stats_speed.SetLabel(format_speed(stats["bytes"] / elapsed))
-                mins, secs = divmod(int(elapsed), 60)
-                self.stats_time.SetLabel(f"{mins}m {secs}s")
+            # Use instant rates from sliding window
+            instant_rate = stats.get("instant_rate", 0.0)
+            instant_speed = stats.get("instant_speed", 0.0)
+            self.stats_rate.SetLabel(f"{instant_rate:.2f} msg/s")
+            self.stats_speed.SetLabel(format_speed(instant_speed))
+            mins, secs = divmod(int(elapsed), 60)
+            self.stats_time.SetLabel(f"{mins}m {secs}s")
 
     def on_msg_list_right_click(self, event):
         menu = wx.Menu()
@@ -3690,7 +3878,7 @@ class XSubscriberPanel(wx.Panel):
                 wx.MessageBox(message, "Connection Error", wx.OK | wx.ICON_ERROR)
 
     def on_update_timer(self, event):
-        """Timer callback - update UI with latest data from XSubscriber (every 10ms)."""
+        """Timer callback - update UI with latest data from XSubscriber (every 100ms)."""
         self._update_display()
 
     def _update_display(self):
@@ -3698,19 +3886,18 @@ class XSubscriberPanel(wx.Panel):
         xsubscriber = XSubscriber()
         topic_stats = xsubscriber.get_stats()
         latest_messages = xsubscriber.get_messages()
+        instant_totals = xsubscriber.get_instant_totals()
 
-        # Update summary statistics
+        # Update summary statistics (cumulative counts, instant rates)
         total_msgs = sum(s["count"] for s in topic_stats.values())
         total_bytes = sum(s["bytes"] for s in topic_stats.values())
         total_topics = len(topic_stats)
 
-        rate_str = "-"
-        speed_str = "-"
-        if self.start_time and topic_stats:
-            elapsed = time.time() - self.start_time
-            if elapsed > 0:
-                rate_str = f"{total_msgs / elapsed:.2f} msg/s"
-                speed_str = format_speed(total_bytes / elapsed)
+        # Use instant rates from sliding window (last 1 second)
+        instant_count = instant_totals["instant_count"]
+        instant_bytes = instant_totals["instant_bytes"]
+        rate_str = f"{instant_count:.2f} msg/s" if topic_stats else "-"
+        speed_str = format_speed(instant_bytes) if topic_stats else "-"
 
         self.summary_msgs.SetLabel(str(total_msgs))
         self.summary_bytes.SetLabel(format_bytes(total_bytes))
@@ -3720,9 +3907,9 @@ class XSubscriberPanel(wx.Panel):
 
         # Update per-topic stats and messages
         for topic, stats in topic_stats.items():
-            # Update stats list
-            elapsed = stats["last_time"] - stats["first_time"]
-            rate_str = f"{stats['count'] / elapsed:.2f}" if elapsed > 0 else "-"
+            # Use instant rate from sliding window for per-topic rate
+            instant_rate = stats.get("instant_rate", 0.0)
+            rate_str = f"{instant_rate:.2f}" if instant_rate > 0 else "-"
             bytes_str = format_bytes(stats["bytes"]).replace(" bytes", " B")
             last_time = time.strftime("%H:%M:%S", time.localtime(stats["last_time"]))
 
@@ -4441,10 +4628,9 @@ class DishPanel(wx.Panel):
         dish = Dish()
         stats = dish.get_stats()
 
-        # Update statistics
-        elapsed = time.time() - stats["start_time"] if stats["start_time"] else 1
-        speed = stats["bytes"] / elapsed if elapsed > 0 else 0
-        stats_text = f"Messages: {stats['count']} | Data: {format_bytes(stats['bytes'])} | Speed: {format_speed(speed)}"
+        # Update statistics (cumulative counts, instant speed)
+        instant_speed = stats.get("instant_speed", 0.0)
+        stats_text = f"Messages: {stats['count']} | Data: {format_bytes(stats['bytes'])} | Speed: {format_speed(instant_speed)}"
         self.stats_lbl.SetLabel(stats_text)
 
         # Get new messages since last update
@@ -4664,10 +4850,9 @@ class GatherPanel(wx.Panel):
         gather = Gather()
         stats = gather.get_stats()
 
-        # Update statistics
-        elapsed = time.time() - stats["start_time"] if stats["start_time"] else 1
-        speed = stats["bytes"] / elapsed if elapsed > 0 else 0
-        stats_text = f"Messages: {stats['count']} | Data: {format_bytes(stats['bytes'])} | Speed: {format_speed(speed)}"
+        # Update statistics (cumulative counts, instant speed)
+        instant_speed = stats.get("instant_speed", 0.0)
+        stats_text = f"Messages: {stats['count']} | Data: {format_bytes(stats['bytes'])} | Speed: {format_speed(instant_speed)}"
         self.stats_lbl.SetLabel(stats_text)
 
         # Get new messages since last update
