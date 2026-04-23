@@ -2,7 +2,7 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Run App",
+      "label": "Run",
       "type": "shell",
       "command": "${command:python.interpreterPath}",
       "args": ["zmq_analyzer.py"],
@@ -19,7 +19,7 @@
       "problemMatcher": []
     },
     {
-      "label": "Install App",
+      "label": "Install",
       "type": "shell",
       "command": "chmod +x ./install.sh && sudo ./install.sh",
       "group": "build",
@@ -30,7 +30,7 @@
       "runOptions": { "reevaluateOnRerun": false }
     },
     {
-      "label": "Uninstall App",
+      "label": "Uninstall",
       "type": "shell",
       "command": "chmod +x ./uninstall.sh && sudo ./uninstall.sh",
       "group": "build",

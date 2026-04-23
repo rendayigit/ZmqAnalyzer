@@ -8,5 +8,28 @@
   "editor.formatOnSave": true,
   "[python]": {
     "editor.defaultFormatter": "ms-python.black-formatter"
-  }
+  },
+  "VsCodeTaskButtons.showCounter": false,
+  "VsCodeTaskButtons.tasks": [
+    {
+      "label": "$(package) Install Dependencies",
+      "task": "Install Dependencies",
+      "tooltip": "Install required dependencies"
+    },
+    {
+      "label": "$(tools) Install",
+      "task": "Install",
+      "tooltip": "Install the application"
+    },
+    {
+      "label": "$(trash) Uninstall",
+      "task": "Uninstall",
+      "tooltip": "Uninstall the application"
+    },
+    {
+      "label": "$(play) Run",
+      "task": "Run",
+      "tooltip": "Run the application"
+    }
+  ]
 }
